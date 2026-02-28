@@ -1,0 +1,99 @@
+import { Session } from 'node:inspector/promises';
+import type { Profiler } from 'node:inspector';
+import { parseFrame } from './frame-parser.js';
+import { PackageResolver } from './package-resolver.js';
+import { SampleStore } from './sample-store.js';
+import type { RawCallFrame } from './types.js';
+
+// Module-level state -- lazy initialization
+let session: Session | null = null;
+let profiling = false;
+const store = new SampleStore();
+const resolver = new PackageResolver(process.cwd());
+
+/**
+ * Start the V8 CPU profiler. If already profiling, this is a safe no-op.
+ */
+export async function track(options?: { interval?: number }): Promise<void> {
+  if (profiling) return;
+
+  if (session === null) {
+    session = new Session();
+    session.connect();
+  }
+
+  await session.post('Profiler.enable');
+
+  if (options?.interval !== undefined) {
+    await session.post('Profiler.setSamplingInterval', {
+      interval: options.interval,
+    });
+  }
+
+  await session.post('Profiler.start');
+  profiling = true;
+}
+
+/**
+ * Stop the profiler (if running) and reset all accumulated sample data.
+ */
+export async function clear(): Promise<void> {
+  if (profiling && session) {
+    await session.post('Profiler.stop');
+    await session.post('Profiler.disable');
+    profiling = false;
+  }
+  store.clear();
+}
+
+/**
+ * Stop the profiler, process collected samples through the data pipeline
+ * (parseFrame -> PackageResolver -> SampleStore), then print a report summary.
+ * Resets the store after reporting (clean slate for next cycle).
+ */
+export async function report(): Promise<void> {
+  if (!profiling || !session) {
+    console.log('no samples collected');
+    return;
+  }
+
+  const { profile } = await session.post('Profiler.stop');
+  await session.post('Profiler.disable');
+  profiling = false;
+
+  processProfile(profile);
+
+  if (store.packages.size === 0) {
+    console.log('no samples collected');
+  }
+
+  store.clear();
+}
+
+/**
+ * Process a V8 CPUProfile: walk each sample, parse the frame, resolve
+ * the package, and record into the store.
+ */
+function processProfile(profile: Profiler.Profile): void {
+  const nodeMap = new Map(profile.nodes.map((n) => [n.id, n]));
+  const samples = profile.samples ?? [];
+
+  for (const sampleId of samples) {
+    const node = nodeMap.get(sampleId);
+    if (!node) continue;
+
+    const parsed = parseFrame(node.callFrame as RawCallFrame);
+
+    if (parsed.kind === 'user') {
+      const { packageName, relativePath } = resolver.resolve(parsed.filePath);
+      store.record(packageName, relativePath, parsed.functionId);
+    } else {
+      store.recordInternal();
+    }
+  }
+}
+
+/** @internal -- exposed for testing only */
+export function _getStore(): SampleStore {
+  return store;
+}
