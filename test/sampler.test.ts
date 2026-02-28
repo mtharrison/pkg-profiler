@@ -1,24 +1,33 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { unlinkSync } from "node:fs";
 import { _getStore, clear, report, track } from "../src/sampler.js";
 import { burnCpu } from "./fixtures/cpu-work.js";
+
+const generatedFiles: string[] = [];
 
 afterEach(async () => {
   await clear();
   vi.restoreAllMocks();
+
+  // Clean up any HTML files generated during tests
+  for (const f of generatedFiles) {
+    try { unlinkSync(f); } catch { /* ignore */ }
+  }
+  generatedFiles.length = 0;
 });
 
 describe("sampler", () => {
   describe("SMPL-01: track() starts profiler that captures samples", () => {
     it("produces real samples for synchronous CPU work", async () => {
-      const spy = vi.spyOn(console, "log");
-
       await track();
       burnCpu(10_000_000);
-      await report();
+      const filepath = await report();
 
-      // report() should NOT have printed "no samples collected"
-      const calls = spy.mock.calls.flat();
-      expect(calls).not.toContain("no samples collected");
+      // report() returns a non-empty filepath when samples were collected
+      expect(typeof filepath).toBe("string");
+      expect(filepath.length).toBeGreaterThan(0);
+      expect(filepath).toContain("where-you-at-");
+      generatedFiles.push(filepath);
     });
   });
 
@@ -26,7 +35,8 @@ describe("sampler", () => {
     it("does not throw on double track()", async () => {
       await track();
       await expect(track()).resolves.toBeUndefined();
-      await report();
+      const filepath = await report();
+      if (filepath) generatedFiles.push(filepath);
     });
   });
 
@@ -47,7 +57,8 @@ describe("sampler", () => {
 
       await track();
       burnCpu(10_000_000);
-      await report();
+      const filepath = await report();
+      if (filepath) generatedFiles.push(filepath);
 
       // recordSpy captured every store.record(pkg, file, fn, deltaUs) call made by processProfile()
       // Even though report() calls store.clear(), the spy retains call history
@@ -62,11 +73,12 @@ describe("sampler", () => {
   });
 
   describe("edge cases", () => {
-    it('report() with no profiling prints "no samples collected"', async () => {
+    it('report() with no profiling returns empty string and prints message', async () => {
       const spy = vi.spyOn(console, "log");
 
-      await report();
+      const result = await report();
 
+      expect(result).toBe("");
       expect(spy).toHaveBeenCalledWith("no samples collected");
     });
 

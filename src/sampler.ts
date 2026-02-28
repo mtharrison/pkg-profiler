@@ -2,6 +2,7 @@ import { Session } from 'node:inspector/promises';
 import type { Profiler } from 'node:inspector';
 import { parseFrame } from './frame-parser.js';
 import { PackageResolver } from './package-resolver.js';
+import { generateReport } from './reporter.js';
 import { SampleStore } from './sample-store.js';
 import type { RawCallFrame } from './types.js';
 
@@ -48,13 +49,17 @@ export async function clear(): Promise<void> {
 
 /**
  * Stop the profiler, process collected samples through the data pipeline
- * (parseFrame -> PackageResolver -> SampleStore), then print a report summary.
- * Resets the store after reporting (clean slate for next cycle).
+ * (parseFrame -> PackageResolver -> SampleStore), generate an HTML report,
+ * and return the file path. Resets the store after reporting (clean slate
+ * for next cycle).
+ *
+ * Returns the absolute path to the generated HTML file, or empty string
+ * if no samples were collected.
  */
-export async function report(): Promise<void> {
+export async function report(): Promise<string> {
   if (!profiling || !session) {
     console.log('no samples collected');
-    return;
+    return '';
   }
 
   const { profile } = await session.post('Profiler.stop');
@@ -63,11 +68,16 @@ export async function report(): Promise<void> {
 
   processProfile(profile);
 
-  if (store.packages.size === 0) {
+  let filepath = '';
+
+  if (store.packages.size > 0) {
+    filepath = generateReport(store);
+  } else {
     console.log('no samples collected');
   }
 
   store.clear();
+  return filepath;
 }
 
 /**
