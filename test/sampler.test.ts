@@ -49,10 +49,15 @@ describe("sampler", () => {
       burnCpu(10_000_000);
       await report();
 
-      // recordSpy captured every store.record(pkg, file, fn) call made by processProfile()
+      // recordSpy captured every store.record(pkg, file, fn, deltaUs) call made by processProfile()
       // Even though report() calls store.clear(), the spy retains call history
       const packageNames = recordSpy.mock.calls.map(([pkg]) => pkg);
       expect(packageNames).toContain("where-you-at");
+
+      // Verify record receives 4 arguments (pkg, file, fn, deltaUs)
+      const firstCall = recordSpy.mock.calls[0]!;
+      expect(firstCall).toHaveLength(4);
+      expect(typeof firstCall[3]).toBe("number"); // deltaUs is a number
     });
   });
 

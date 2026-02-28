@@ -37,15 +37,32 @@ describe('parseFrame', () => {
     });
   });
 
-  describe('internal frames (node: prefix)', () => {
-    it('classifies node:internal/modules/run_main as internal', () => {
+  describe('node: built-in frames (attributable)', () => {
+    it('classifies node:internal/modules/run_main as user frame', () => {
       const result = parseFrame(makeFrame({ url: 'node:internal/modules/run_main' }));
-      expect(result).toEqual({ kind: 'internal' });
+      expect(result).toEqual({
+        kind: 'user',
+        filePath: 'node:internal/modules/run_main',
+        functionId: 'testFn:1',
+      });
     });
 
-    it('classifies node:fs as internal', () => {
+    it('classifies node:fs as user frame', () => {
       const result = parseFrame(makeFrame({ url: 'node:fs' }));
-      expect(result).toEqual({ kind: 'internal' });
+      expect(result).toEqual({
+        kind: 'user',
+        filePath: 'node:fs',
+        functionId: 'testFn:1',
+      });
+    });
+
+    it('uses <anonymous> for empty functionName in node: frames', () => {
+      const result = parseFrame(makeFrame({ url: 'node:fs', functionName: '', lineNumber: 5 }));
+      expect(result).toEqual({
+        kind: 'user',
+        filePath: 'node:fs',
+        functionId: '<anonymous>:6',
+      });
     });
   });
 
