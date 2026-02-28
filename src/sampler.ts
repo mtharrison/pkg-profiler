@@ -72,23 +72,32 @@ export async function report(): Promise<void> {
 
 /**
  * Process a V8 CPUProfile: walk each sample, parse the frame, resolve
- * the package, and record into the store.
+ * the package, and record into the store. Uses timeDeltas for wall-time
+ * microsecond accumulation.
  */
 function processProfile(profile: Profiler.Profile): void {
   const nodeMap = new Map(profile.nodes.map((n) => [n.id, n]));
   const samples = profile.samples ?? [];
+  const timeDeltas = profile.timeDeltas ?? [];
 
-  for (const sampleId of samples) {
-    const node = nodeMap.get(sampleId);
+  for (let i = 0; i < samples.length; i++) {
+    const node = nodeMap.get(samples[i]!);
     if (!node) continue;
 
+    const deltaUs = timeDeltas[i] ?? 0;
     const parsed = parseFrame(node.callFrame as RawCallFrame);
 
     if (parsed.kind === 'user') {
-      const { packageName, relativePath } = resolver.resolve(parsed.filePath);
-      store.record(packageName, relativePath, parsed.functionId);
+      if (parsed.filePath.startsWith('node:')) {
+        // Node.js built-in: attribute to "node (built-in)" package
+        const relativePath = parsed.filePath.slice(5);
+        store.record('node (built-in)', relativePath, parsed.functionId, deltaUs);
+      } else {
+        const { packageName, relativePath } = resolver.resolve(parsed.filePath);
+        store.record(packageName, relativePath, parsed.functionId, deltaUs);
+      }
     } else {
-      store.recordInternal();
+      store.recordInternal(deltaUs);
     }
   }
 }

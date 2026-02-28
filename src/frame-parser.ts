@@ -17,9 +17,10 @@ export function parseFrame(frame: RawCallFrame): ParsedFrame {
     return { kind: 'internal' };
   }
 
-  // Node.js built-in modules
+  // Node.js built-in modules -- treated as attributable user frames
   if (url.startsWith('node:')) {
-    return { kind: 'internal' };
+    const functionId = `${functionName || '<anonymous>'}:${lineNumber + 1}`;
+    return { kind: 'user', filePath: url, functionId };
   }
 
   // WebAssembly frames
