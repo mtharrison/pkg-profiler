@@ -1,0 +1,22 @@
+{
+  "name": "where-you-at",
+  "version": "1.0.0",
+  "description": "Per-package wall-time profiling for Node.js applications",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "~5.7",
+    "vitest": "^3"
+  }
+}
