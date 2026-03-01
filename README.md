@@ -19,6 +19,14 @@
   <img src="assets/report-screenshot.png" width="660" alt="Example HTML report showing per-package wall time breakdown">
 </p>
 
+## Installation
+
+```bash
+npm install @mtharrison/pkg-profiler
+```
+
+Works with both ESM (`import`) and CommonJS (`require`).
+
 ## Quick Start
 
 ```typescript
@@ -28,6 +36,19 @@ await start();
 // ... your code here ...
 const result = await stop();
 result.writeHtml(); // writes an HTML report to cwd
+```
+
+With async I/O tracking:
+
+```typescript
+import { start, stop } from "@mtharrison/pkg-profiler";
+
+await start({ trackAsync: true });
+// ... your code with network/file I/O ...
+const result = await stop();
+console.log(`Wall time: ${result.wallTimeUs}us`);
+console.log(`Async I/O wait: ${result.totalAsyncTimeUs}us`);
+result.writeHtml();
 ```
 
 Or use the convenience wrapper:
@@ -51,9 +72,10 @@ A self-contained HTML report that shows exactly which npm packages are eating yo
 
 Start the V8 CPU sampling profiler. Safe no-op if already profiling.
 
-| Option     | Type     | Default    | Description                       |
-| ---------- | -------- | ---------- | --------------------------------- |
-| `interval` | `number` | V8 default | Sampling interval in microseconds |
+| Option       | Type      | Default | Description                                           |
+| ------------ | --------- | ------- | ----------------------------------------------------- |
+| `interval`   | `number`  | `1000`  | Sampling interval in microseconds                     |
+| `trackAsync` | `boolean` | `false` | Enable async I/O wait time tracking via `async_hooks` |
 
 ### `stop()`
 
@@ -79,25 +101,32 @@ const path = result.writeHtml();
 
 Long-running mode for servers. Starts the profiler and registers shutdown handlers for SIGINT, SIGTERM, and `beforeExit`. When triggered, stops the profiler and calls `onExit` with the result.
 
+`StartOptions` (`interval`, `trackAsync`) can be passed alongside `onExit`:
+
 ```typescript
-await profile({ onExit: (result) => result.writeHtml() });
+await profile({
+  trackAsync: true,
+  onExit: (result) => result.writeHtml(),
+});
 
 const app = createApp();
 app.listen(3000);
-// Ctrl+C → stop() called → onExit fires → writeHtml() → process exits
+// Ctrl+C -> stop() called -> onExit fires -> writeHtml() -> process exits
 ```
 
 ### `PkgProfile`
 
 Returned by `stop()` and `profile()`. Contains aggregated profiling data.
 
-| Property      | Type             | Description                                  |
-| ------------- | ---------------- | -------------------------------------------- |
-| `timestamp`   | `string`         | When the profile was captured                |
-| `totalTimeUs` | `number`         | Total sampled wall time in microseconds      |
-| `packages`    | `PackageEntry[]` | Package breakdown sorted by time descending  |
-| `otherCount`  | `number`         | Number of packages below reporting threshold |
-| `projectName` | `string`         | Project name from package.json               |
+| Property           | Type                  | Description                                                       |
+| ------------------ | --------------------- | ----------------------------------------------------------------- |
+| `timestamp`        | `string`              | When the profile was captured                                     |
+| `totalTimeUs`      | `number`              | Total sampled CPU time in microseconds                            |
+| `wallTimeUs`       | `number \| undefined` | Elapsed wall time from `start()` to `stop()` in microseconds      |
+| `totalAsyncTimeUs` | `number \| undefined` | Total async I/O wait time in microseconds (requires `trackAsync`) |
+| `packages`         | `PackageEntry[]`      | Package breakdown sorted by time descending                       |
+| `otherCount`       | `number`              | Number of packages below reporting threshold                      |
+| `projectName`      | `string`              | Project name from `package.json`                                  |
 
 #### `writeHtml(path?)`
 
@@ -106,9 +135,29 @@ Write a self-contained HTML report to disk. Returns the absolute path to the wri
 - **Default**: writes to `./where-you-at-{timestamp}.html` in the current directory
 - **With path**: writes to the specified location
 
+## Async I/O Tracking
+
+Enable `trackAsync: true` to measure time spent waiting on async I/O (network requests, file reads, timers, etc.) in addition to CPU sampling. This uses Node.js `async_hooks` to track when async operations start and complete, attributing wait time to the originating package.
+
+When enabled, each `PackageEntry` gains additional fields:
+
+| Property       | Type                  | Description                                  |
+| -------------- | --------------------- | -------------------------------------------- |
+| `asyncTimeUs`  | `number \| undefined` | Async wait time for this package             |
+| `asyncPct`     | `number \| undefined` | Percentage of total async time               |
+| `asyncOpCount` | `number \| undefined` | Number of async operations from this package |
+
+The HTML report will include async timing data alongside CPU time when available.
+
+### Dependency Chains
+
+Each `PackageEntry` includes an optional `depChain` field showing how a transitive dependency is reached. For example, if `raw-body` is used via `express -> body-parser -> raw-body`, the `depChain` will be `["express", "body-parser", "raw-body"]`. Direct dependencies and first-party code will not have a `depChain`.
+
 ## How It Works
 
 Uses the V8 CPU profiler (`node:inspector`) to sample the call stack at regular intervals. Each sample's leaf frame is attributed the elapsed wall time, then file paths are resolved to npm packages by walking up through `node_modules`. No code instrumentation required.
+
+When `trackAsync` is enabled, `async_hooks` are used to additionally measure time spent waiting on async I/O and attribute it to the originating package.
 
 ## Requirements
 
