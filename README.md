@@ -21,7 +21,7 @@
   <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2024" alt="Node 24"></a>
 </p>
 
-**[Installation](#installation)** | **[Quick Start](#quick-start)** | **[API](#api)** | **[Async I/O Tracking](#async-io-tracking)** | **[How It Works](#how-it-works)**
+<p align="center"><strong><a href="#installation">Installation</a></strong> | <strong><a href="#quick-start">Quick Start</a></strong> | <strong><a href="#api">API</a></strong> | <strong><a href="#async-io-tracking">Async I/O Tracking</a></strong> | <strong><a href="#how-it-works">How It Works</a></strong></p>
 
 <p align="center">
   <img src="assets/report-screenshot.png" width="660" alt="Example HTML report showing per-package wall time breakdown">
