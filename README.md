@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" width="120" height="120" alt="where-you-at logo">
+  <img src="assets/logo.png" width="120" height="120" alt="where-you-at logo">
 </p>
 
 <h1 align="center">@mtharrison/pkg-profiler</h1>
@@ -22,7 +22,7 @@
 ## Quick Start
 
 ```typescript
-import { start, stop } from '@mtharrison/pkg-profiler';
+import { start, stop } from "@mtharrison/pkg-profiler";
 
 await start();
 // ... your code here ...
@@ -33,7 +33,7 @@ result.writeHtml(); // writes an HTML report to cwd
 Or use the convenience wrapper:
 
 ```typescript
-import { profile } from '@mtharrison/pkg-profiler';
+import { profile } from "@mtharrison/pkg-profiler";
 
 const result = await profile(async () => {
   await build();
@@ -51,8 +51,8 @@ A self-contained HTML report that shows exactly which npm packages are eating yo
 
 Start the V8 CPU sampling profiler. Safe no-op if already profiling.
 
-| Option     | Type     | Default | Description                        |
-|------------|----------|---------|------------------------------------|
+| Option     | Type     | Default    | Description                       |
+| ---------- | -------- | ---------- | --------------------------------- |
 | `interval` | `number` | V8 default | Sampling interval in microseconds |
 
 ### `stop()`
@@ -91,13 +91,13 @@ app.listen(3000);
 
 Returned by `stop()` and `profile()`. Contains aggregated profiling data.
 
-| Property      | Type             | Description                                    |
-|---------------|------------------|------------------------------------------------|
-| `timestamp`   | `string`         | When the profile was captured                  |
-| `totalTimeUs` | `number`         | Total sampled wall time in microseconds        |
-| `packages`    | `PackageEntry[]` | Package breakdown sorted by time descending    |
-| `otherCount`  | `number`         | Number of packages below reporting threshold   |
-| `projectName` | `string`         | Project name from package.json                 |
+| Property      | Type             | Description                                  |
+| ------------- | ---------------- | -------------------------------------------- |
+| `timestamp`   | `string`         | When the profile was captured                |
+| `totalTimeUs` | `number`         | Total sampled wall time in microseconds      |
+| `packages`    | `PackageEntry[]` | Package breakdown sorted by time descending  |
+| `otherCount`  | `number`         | Number of packages below reporting threshold |
+| `projectName` | `string`         | Project name from package.json               |
 
 #### `writeHtml(path?)`
 
