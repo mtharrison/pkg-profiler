@@ -273,6 +273,34 @@ describe('AsyncTracker', () => {
     expect(storeTotal).toBeGreaterThan(0);
   });
 
+  it('counts multiple async ops from the same call site', async () => {
+    store = new SampleStore();
+    const resolver = new PackageResolver(process.cwd());
+    tracker = new AsyncTracker(resolver, store, 0); // no threshold
+
+    tracker.enable();
+
+    // Run 5 sequential delays from the same call site (asyncDelay)
+    for (let i = 0; i < 5; i++) {
+      await asyncDelay(10);
+    }
+
+    tracker.disable();
+
+    // The sample count for the asyncDelay call site should be >= 5
+    // (may be more due to internal async ops within setTimeout)
+    let totalSampleCount = 0;
+    for (const fileMap of store.sampleCountsByPackage.values()) {
+      for (const funcMap of fileMap.values()) {
+        for (const count of funcMap.values()) {
+          totalSampleCount += count;
+        }
+      }
+    }
+
+    expect(totalSampleCount).toBeGreaterThanOrEqual(5);
+  });
+
   it('mergedTotalUs is 0 before disable', () => {
     store = new SampleStore();
     const resolver = new PackageResolver(process.cwd());

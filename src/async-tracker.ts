@@ -274,7 +274,7 @@ export class AsyncTracker {
       const totalUs = sumIntervals(merged);
       if (totalUs > 0) {
         const parts = key.split('\0');
-        this.store.record(parts[0]!, parts[1]!, parts[2]!, totalUs);
+        this.store.record(parts[0]!, parts[1]!, parts[2]!, totalUs, intervals.length);
       }
     }
 
