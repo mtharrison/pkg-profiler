@@ -6,7 +6,7 @@
  * interactive threshold slider that filters data client-side.
  */
 
-import type { ReportData, PackageEntry, FileEntry } from '../types.js';
+import type { ReportData, PackageEntry, FileEntry, StackFrame } from '../types.js';
 import { formatTime, formatPct, escapeHtml } from './format.js';
 
 function formatDepChain(depChain: string[] | undefined): string {
@@ -14,26 +14,51 @@ function formatDepChain(depChain: string[] | undefined): string {
   return `<span class="dep-chain">via ${depChain.map(n => escapeHtml(n)).join(' &gt; ')}</span>`;
 }
 
+/** Returns a CSS color based on percentage (0-100) for heat-mapping. */
+function heatColor(pct: number): string {
+  if (pct >= 35) return 'var(--heat-hot)';
+  if (pct >= 15) return 'var(--heat-warm)';
+  return 'var(--heat-cool)';
+}
+
+/** Returns a data-heat attribute string based on percentage. */
+function heatDataAttr(pct: number): string {
+  if (pct >= 35) return ' data-heat="hot"';
+  if (pct >= 15) return ' data-heat="warm"';
+  return '';
+}
+
 function generateCss(): string {
   return `
     :root {
-      --bg: #fafbfc;
-      --text: #1a1a2e;
-      --muted: #8b8fa3;
-      --border: #e2e4ea;
-      --first-party-accent: #3b6cf5;
-      --first-party-bg: #eef2ff;
-      --dep-bg: #ffffff;
-      --bar-track: #e8eaed;
-      --bar-fill: #5b8def;
-      --bar-fill-fp: #3b6cf5;
-      --bar-fill-async: #f5943b;
-      --other-text: #a0a4b8;
-      --table-header-bg: #f4f5f7;
-      --shadow: 0 1px 3px rgba(0,0,0,0.06);
-      --radius: 6px;
-      --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --bg: #0a0e1a;
+      --surface: #111a2e;
+      --surface-hover: #162040;
+      --text: #e2e8f0;
+      --text-secondary: #8892a8;
+      --muted: #5a6578;
+      --border: #1c2844;
+
+      --first-party-accent: #10b981;
+      --first-party-bg: rgba(16, 185, 129, 0.05);
+      --dep-bg: var(--surface);
+
+      --bar-track: #1c2844;
+      --bar-fill: #60a5fa;
+      --bar-fill-fp: #10b981;
+      --bar-fill-async: #a78bfa;
+
+      --heat-cool: #60a5fa;
+      --heat-warm: #fbbf24;
+      --heat-hot: #fb7185;
+
+      --other-text: #3d4a5e;
+      --table-header-bg: #0d1225;
+      --shadow: 0 4px 16px rgba(0,0,0,0.5);
+      --radius: 10px;
+
+      --font-mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -41,38 +66,99 @@ function generateCss(): string {
     body {
       font-family: var(--font-sans);
       background: var(--bg);
+      background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.018) 1px, transparent 0);
+      background-size: 20px 20px;
       color: var(--text);
       line-height: 1.5;
-      padding: 2rem;
-      max-width: 960px;
+      padding: 2.5rem;
+      max-width: 1000px;
       margin: 0 auto;
+      min-height: 100vh;
     }
 
+    /* === Header === */
     h1 {
       font-size: 1.5rem;
-      font-weight: 600;
+      font-weight: 700;
+      letter-spacing: -0.02em;
       margin-bottom: 0.25rem;
     }
 
     .meta {
       color: var(--muted);
-      font-size: 0.85rem;
-      margin-bottom: 2rem;
+      font-size: 0.78rem;
+      margin-bottom: 1.5rem;
+      font-family: var(--font-mono);
     }
 
+    /* === Metric cards === */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      animation: fadeSlideUp 0.4s ease both;
+    }
+
+    .metric-card:nth-child(1) { animation-delay: 0s; }
+    .metric-card:nth-child(2) { animation-delay: 0.05s; }
+    .metric-card:nth-child(3) { animation-delay: 0.1s; }
+    .metric-card:nth-child(4) { animation-delay: 0.15s; }
+
+    .metric-value {
+      font-family: var(--font-mono);
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+    }
+
+    .metric-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-top: 0.35rem;
+    }
+
+    .metric-card.wall .metric-value { color: var(--text); }
+    .metric-card.cpu .metric-value { color: var(--bar-fill); }
+    .metric-card.utilization .metric-value { color: var(--heat-warm); }
+    .metric-card.async .metric-value { color: var(--bar-fill-async); }
+
+    /* === Section headings === */
     h2 {
-      font-size: 1.1rem;
+      font-size: 0.72rem;
       font-weight: 600;
-      margin-bottom: 0.75rem;
-      margin-top: 2rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 1rem;
+      margin-top: 2.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
     }
 
-    /* Threshold slider */
+    /* === Controls === */
+    .controls-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
     .threshold-control {
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      margin-bottom: 1rem;
       font-size: 0.85rem;
     }
 
@@ -81,33 +167,38 @@ function generateCss(): string {
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      font-size: 0.8rem;
+      font-size: 0.7rem;
     }
 
     .threshold-control input[type="range"] {
-      flex: 1;
-      max-width: 240px;
-      height: 8px;
+      width: 160px;
+      height: 6px;
       appearance: none;
       -webkit-appearance: none;
       background: var(--bar-track);
-      border-radius: 4px;
+      border-radius: 3px;
       outline: none;
     }
 
     .threshold-control input[type="range"]::-webkit-slider-thumb {
       appearance: none;
       -webkit-appearance: none;
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       background: var(--bar-fill);
       cursor: pointer;
+      box-shadow: 0 0 8px rgba(96, 165, 250, 0.4);
+      transition: box-shadow 0.2s;
+    }
+
+    .threshold-control input[type="range"]::-webkit-slider-thumb:hover {
+      box-shadow: 0 0 12px rgba(96, 165, 250, 0.6);
     }
 
     .threshold-control input[type="range"]::-moz-range-thumb {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       background: var(--bar-fill);
       cursor: pointer;
@@ -116,255 +207,17 @@ function generateCss(): string {
 
     .threshold-control span {
       font-family: var(--font-mono);
-      font-size: 0.85rem;
-      min-width: 3.5em;
-    }
-
-    /* Summary table */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: #fff;
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      overflow: hidden;
-      margin-bottom: 1rem;
-    }
-
-    th {
-      text-align: left;
-      background: var(--table-header-bg);
-      padding: 0.6rem 0.75rem;
-      font-size: 0.8rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--muted);
-      border-bottom: 1px solid var(--border);
-    }
-
-    td {
-      padding: 0.55rem 0.75rem;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.9rem;
-    }
-
-    tr:last-child td { border-bottom: none; }
-
-    tr.first-party td:first-child {
-      border-left: 3px solid var(--first-party-accent);
-      padding-left: calc(0.75rem - 3px);
-    }
-
-    td.pkg-name { font-family: var(--font-mono); font-size: 0.85rem; }
-    .dep-chain { display: block; font-size: 0.7rem; color: var(--muted); font-family: var(--font-sans); }
-    td.numeric { text-align: right; font-family: var(--font-mono); font-size: 0.85rem; }
-    td.async-col { color: var(--bar-fill-async); }
-
-    .bar-cell {
-      width: 30%;
-      padding-right: 1rem;
-    }
-
-    .bar-container {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .bar-track {
-      flex: 1;
-      height: 8px;
-      background: var(--bar-track);
-      border-radius: 4px;
-      overflow: hidden;
-    }
-
-    .bar-fill {
-      height: 100%;
-      border-radius: 4px;
-      background: var(--bar-fill);
-      min-width: 1px;
-    }
-
-    tr.first-party .bar-fill {
-      background: var(--bar-fill-fp);
-    }
-
-    .bar-pct {
-      font-family: var(--font-mono);
       font-size: 0.8rem;
       min-width: 3.5em;
-      text-align: right;
+      color: var(--text-secondary);
     }
-
-    tr.other-row td {
-      color: var(--other-text);
-      font-style: italic;
-    }
-
-    /* Tree */
-    .tree {
-      background: #fff;
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      overflow: hidden;
-    }
-
-    details {
-      border-bottom: 1px solid var(--border);
-    }
-
-    details:last-child { border-bottom: none; }
-
-    details details { border-bottom: 1px solid var(--border); }
-    details details:last-child { border-bottom: none; }
-
-    summary {
-      cursor: pointer;
-      list-style: none;
-      padding: 0.6rem 0.75rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.9rem;
-      user-select: none;
-    }
-
-    summary::-webkit-details-marker { display: none; }
-
-    summary::before {
-      content: '\\25B6';
-      font-size: 0.6rem;
-      color: var(--muted);
-      transition: transform 0.15s ease;
-      flex-shrink: 0;
-    }
-
-    details[open] > summary::before {
-      transform: rotate(90deg);
-    }
-
-    .tree-name {
-      font-family: var(--font-mono);
-      font-size: 0.85rem;
-      flex: 1;
-    }
-
-    .tree-label {
-      font-family: var(--font-sans);
-      font-size: 0.65rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      padding: 0.1rem 0.35rem;
-      border-radius: 3px;
-      flex-shrink: 0;
-    }
-
-    .tree-label.pkg { background: #e8eaed; color: #555; }
-    .tree-label.file { background: #e8f0fe; color: #3b6cf5; }
-    .tree-label.fn { background: #f0f0f0; color: #777; }
-
-    .tree-stats {
-      font-family: var(--font-mono);
-      font-size: 0.8rem;
-      color: var(--muted);
-      flex-shrink: 0;
-    }
-
-    .tree-async {
-      font-family: var(--font-mono);
-      font-size: 0.8rem;
-      color: var(--bar-fill-async);
-      flex-shrink: 0;
-    }
-
-    /* Level indentation */
-    .level-0 > summary { padding-left: 0.75rem; }
-    .level-1 > summary { padding-left: 2rem; }
-    .level-2 { padding: 0.45rem 0.75rem 0.45rem 3.25rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; }
-
-    /* First-party package highlight */
-    .fp-pkg > summary {
-      background: var(--first-party-bg);
-      border-left: 3px solid var(--first-party-accent);
-    }
-
-    .other-item {
-      padding: 0.45rem 0.75rem;
-      color: var(--other-text);
-      font-style: italic;
-      font-size: 0.85rem;
-    }
-
-    .other-item.indent-1 { padding-left: 2rem; }
-    .other-item.indent-2 { padding-left: 3.25rem; }
-
-    /* Function-level source toggle */
-    .level-2.has-source { padding: 0; font-size: 0.85rem; display: block; }
-    .level-2.has-source > summary {
-      padding: 0.45rem 0.75rem 0.45rem 3.25rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      cursor: pointer;
-      list-style: none;
-    }
-    .level-2.has-source > summary::-webkit-details-marker { display: none; }
-    .level-2.has-source > summary::before {
-      content: '\\25B6';
-      font-size: 0.5rem;
-      color: var(--muted);
-      transition: transform 0.15s ease;
-      flex-shrink: 0;
-    }
-    .level-2.has-source[open] > summary::before {
-      transform: rotate(90deg);
-    }
-
-    /* Source snippet */
-    .source-snippet {
-      margin: 0;
-      padding: 0.5rem 0;
-      background: #1e1e2e;
-      color: #cdd6f4;
-      overflow-x: auto;
-      font-family: var(--font-mono);
-      font-size: 0.8rem;
-      line-height: 1.6;
-    }
-    .source-snippet code { display: block; }
-    .src-line {
-      display: flex;
-      padding: 0 1rem 0 3.25rem;
-      white-space: pre;
-    }
-    .src-hot {
-      background: rgba(235, 160, 70, 0.15);
-      border-left: 3px solid #f5943b;
-      padding-left: calc(3.25rem - 3px);
-    }
-    .src-lineno {
-      display: inline-block;
-      width: 3.5em;
-      text-align: right;
-      color: #585b70;
-      padding-right: 1em;
-      flex-shrink: 0;
-      user-select: none;
-    }
-    .tok-kw { color: #cba6f7; }
-    .tok-str { color: #a6e3a1; }
-    .tok-cmt { color: #6c7086; font-style: italic; }
-    .tok-num { color: #fab387; }
 
     /* Sort control */
     .sort-control {
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      margin-left: 1.5rem;
+      margin-left: auto;
       font-size: 0.85rem;
     }
 
@@ -373,25 +226,30 @@ function generateCss(): string {
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      font-size: 0.8rem;
+      font-size: 0.7rem;
     }
 
     .sort-toggle {
       display: inline-flex;
       border: 1px solid var(--border);
-      border-radius: 4px;
+      border-radius: 6px;
       overflow: hidden;
     }
 
     .sort-toggle button {
       font-family: var(--font-sans);
-      font-size: 0.8rem;
-      padding: 0.25rem 0.6rem;
+      font-size: 0.72rem;
+      padding: 0.3rem 0.75rem;
       border: none;
-      background: #fff;
+      background: var(--surface);
       color: var(--muted);
       cursor: pointer;
-      transition: background 0.15s, color 0.15s;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .sort-toggle button:hover {
+      background: var(--surface-hover);
+      color: var(--text-secondary);
     }
 
     .sort-toggle button + button {
@@ -408,10 +266,424 @@ function generateCss(): string {
       color: #fff;
     }
 
+    /* Tree controls */
+    .tree-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .search-wrapper {
+      position: relative;
+      flex: 1;
+      max-width: 260px;
+    }
+
+    .search-wrapper::before {
+      content: '\\2315';
+      position: absolute;
+      left: 0.65rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 0.85rem;
+      pointer-events: none;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 0.4rem 0.75rem 0.4rem 2rem;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus {
+      border-color: var(--bar-fill);
+    }
+
+    .search-input::placeholder {
+      color: var(--muted);
+    }
+
+    .tree-btn {
+      font-family: var(--font-sans);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.4rem 0.65rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .tree-btn:hover {
+      background: var(--surface-hover);
+      color: var(--text-secondary);
+    }
+
+    /* === Summary table === */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 1rem;
+      animation: fadeSlideUp 0.4s ease 0.2s both;
+    }
+
+    th {
+      text-align: left;
+      background: var(--table-header-bg);
+      padding: 0.65rem 0.85rem;
+      font-size: 0.62rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    td {
+      padding: 0.6rem 0.85rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    tr:hover td { background: var(--surface-hover); }
+
+    tr.first-party td:first-child {
+      border-left: 3px solid var(--first-party-accent);
+      padding-left: calc(0.85rem - 3px);
+    }
+
+    td.pkg-name {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .dep-chain {
+      display: block;
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-family: var(--font-sans);
+    }
+
+    td.numeric {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    td.async-col { color: var(--bar-fill-async); }
+
+    .bar-cell {
+      width: 30%;
+      padding-right: 1rem;
+    }
+
+    .bar-container {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .bar-track {
+      flex: 1;
+      height: 6px;
+      background: var(--bar-track);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--bar-fill);
+      min-width: 1px;
+      transition: width 0.3s ease;
+    }
+
+    tr.first-party .bar-fill {
+      background: var(--bar-fill-fp);
+    }
+
+    .bar-pct {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      min-width: 3.5em;
+      text-align: right;
+      color: var(--text-secondary);
+    }
+
+    tr.other-row td {
+      color: var(--other-text);
+      font-style: italic;
+    }
+
+    /* Heat indicators on dependency rows */
+    tr.dependency[data-heat="warm"] td:first-child {
+      border-left: 3px solid var(--heat-warm);
+      padding-left: calc(0.85rem - 3px);
+    }
+    tr.dependency[data-heat="hot"] td:first-child {
+      border-left: 3px solid var(--heat-hot);
+      padding-left: calc(0.85rem - 3px);
+    }
+
+    /* === Tree === */
+    .tree {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      animation: fadeSlideUp 0.4s ease 0.3s both;
+    }
+
+    details {
+      border-bottom: 1px solid var(--border);
+    }
+
+    details:last-child { border-bottom: none; }
+
+    details details { border-bottom: 1px solid var(--border); }
+    details details:last-child { border-bottom: none; }
+
+    summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 0.65rem 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      user-select: none;
+      transition: background 0.15s;
+    }
+
+    summary:hover { background: var(--surface-hover); }
+
+    summary::-webkit-details-marker { display: none; }
+
+    summary::before {
+      content: '\\25B6';
+      font-size: 0.55rem;
+      color: var(--muted);
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    details[open] > summary::before {
+      transform: rotate(90deg);
+    }
+
+    .tree-name {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      flex: 1;
+    }
+
+    .tree-label {
+      font-family: var(--font-sans);
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .tree-label.pkg { background: #1e293b; color: #94a3b8; }
+    .tree-label.file { background: rgba(96, 165, 250, 0.12); color: #60a5fa; }
+    .tree-label.fn { background: rgba(148, 163, 184, 0.08); color: #64748b; }
+
+    .tree-stats {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .tree-async {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--bar-fill-async);
+      flex-shrink: 0;
+    }
+
+    /* Level indentation with guide lines */
+    .level-0 > summary { padding-left: 0.85rem; }
+    .level-1 > summary { padding-left: 2.25rem; }
+    .level-1 {
+      position: relative;
+    }
+    .level-1::before {
+      content: '';
+      position: absolute;
+      left: 1.4rem;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--border);
+    }
+    .level-2 {
+      padding: 0.5rem 0.85rem 0.5rem 3.65rem;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      position: relative;
+      transition: background 0.15s;
+    }
+    .level-2:hover { background: var(--surface-hover); }
+    .level-2::before {
+      content: '';
+      position: absolute;
+      left: 2.7rem;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--border);
+    }
+
+    /* First-party highlight */
+    .fp-pkg > summary {
+      background: var(--first-party-bg);
+      border-left: 3px solid var(--first-party-accent);
+    }
+
+    .fp-pkg > summary:hover {
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    /* Heat borders on dependency tree items */
+    .level-0[data-heat="warm"] > summary {
+      border-left: 3px solid var(--heat-warm);
+    }
+    .level-0[data-heat="hot"] > summary {
+      border-left: 3px solid var(--heat-hot);
+    }
+
+    .other-item {
+      padding: 0.5rem 0.85rem;
+      color: var(--other-text);
+      font-style: italic;
+      font-size: 0.8rem;
+    }
+
+    .other-item.indent-1 { padding-left: 2.25rem; }
+    .other-item.indent-2 { padding-left: 3.65rem; }
+
+    /* Function-level source toggle */
+    .level-2.has-source { padding: 0; font-size: 0.85rem; display: block; }
+    .level-2.has-source > summary {
+      padding: 0.5rem 0.85rem 0.5rem 3.65rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      list-style: none;
+      transition: background 0.15s;
+    }
+    .level-2.has-source > summary:hover { background: var(--surface-hover); }
+    .level-2.has-source > summary::-webkit-details-marker { display: none; }
+    .level-2.has-source > summary::before {
+      content: '\\25B6';
+      font-size: 0.45rem;
+      color: var(--muted);
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+    .level-2.has-source[open] > summary::before {
+      transform: rotate(90deg);
+    }
+
+    /* Source snippet */
+    .source-snippet {
+      margin: 0;
+      padding: 0.5rem 0;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      line-height: 1.7;
+      border-top: 1px solid #2a2a3e;
+    }
+    .source-snippet code { display: block; }
+    .src-line {
+      display: flex;
+      padding: 0 1rem 0 3.65rem;
+      white-space: pre;
+    }
+    .src-hot {
+      background: rgba(251, 113, 133, 0.1);
+      border-left: 3px solid var(--heat-hot);
+      padding-left: calc(3.65rem - 3px);
+    }
+    .src-lineno {
+      display: inline-block;
+      width: 3.5em;
+      text-align: right;
+      color: #585b70;
+      padding-right: 1em;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    .tok-kw { color: #cba6f7; }
+    .tok-str { color: #a6e3a1; }
+    .tok-cmt { color: #6c7086; font-style: italic; }
+    .tok-num { color: #fab387; }
+
+    /* Async call stack */
+    .async-stack-toggle { cursor: pointer; color: var(--bar-fill-async); font-size: 0.75rem; margin-left: 0.5rem; }
+    .async-stack-toggle:hover { text-decoration: underline; }
+    .async-stack {
+      margin: 0.25rem 0 0.25rem 3.65rem;
+      padding: 0.5rem 0.85rem;
+      background: rgba(167, 139, 250, 0.06);
+      border-left: 3px solid var(--bar-fill-async);
+      border-radius: 0 6px 6px 0;
+      font-size: 0.78rem;
+      line-height: 1.7;
+    }
+    .async-stack-frame { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); }
+    .async-stack-frame.current { font-weight: 600; color: var(--bar-fill-async); }
+    .async-stack-arrow { color: var(--muted); margin: 0 0.25rem; font-size: 0.65rem; }
+
+    /* Animations */
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Responsive */
     @media (max-width: 600px) {
       body { padding: 1rem; }
       .bar-cell { width: 25%; }
       .sort-control { margin-left: 0; margin-top: 0.5rem; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .tree-controls { flex-wrap: wrap; }
+      .search-wrapper { max-width: none; flex-basis: 100%; }
     }
   `;
 }
@@ -448,6 +720,18 @@ function generateJs(): string {
   function depChainHtml(depChain) {
     if (!depChain || depChain.length === 0) return '';
     return '<span class="dep-chain">via ' + depChain.map(function(n) { return escapeHtml(n); }).join(' &gt; ') + '</span>';
+  }
+
+  function heatColor(pct) {
+    if (pct >= 35) return 'var(--heat-hot)';
+    if (pct >= 15) return 'var(--heat-warm)';
+    return 'var(--heat-cool)';
+  }
+
+  function heatAttr(pct) {
+    if (pct >= 35) return ' data-heat="hot"';
+    if (pct >= 15) return ' data-heat="warm"';
+    return '';
   }
 
   var sortBy = 'cpu';
@@ -532,6 +816,72 @@ function generateJs(): string {
     return { packages: filtered, otherCount: otherCount };
   }
 
+  function filterByQuery(result, query) {
+    var pkgs = [];
+    var otherCount = 0;
+
+    for (var i = 0; i < result.packages.length; i++) {
+      var pkg = result.packages[i];
+      var pkgMatch = pkg.name.toLowerCase().indexOf(query) !== -1;
+
+      var files = [];
+      var fileOther = 0;
+
+      for (var j = 0; j < pkg.files.length; j++) {
+        var file = pkg.files[j];
+        var fileMatch = file.name.toLowerCase().indexOf(query) !== -1;
+
+        var fns = [];
+        var fnOther = 0;
+
+        for (var k = 0; k < file.functions.length; k++) {
+          var fn = file.functions[k];
+          if (pkgMatch || fileMatch || fn.name.toLowerCase().indexOf(query) !== -1) {
+            fns.push(fn);
+          } else {
+            fnOther++;
+          }
+        }
+
+        if (pkgMatch || fileMatch || fns.length > 0) {
+          files.push({
+            name: file.name,
+            timeUs: file.timeUs,
+            pct: file.pct,
+            sampleCount: file.sampleCount,
+            asyncTimeUs: file.asyncTimeUs,
+            asyncPct: file.asyncPct,
+            asyncOpCount: file.asyncOpCount,
+            functions: fns,
+            otherCount: fnOther
+          });
+        } else {
+          fileOther++;
+        }
+      }
+
+      if (pkgMatch || files.length > 0) {
+        pkgs.push({
+          name: pkg.name,
+          timeUs: pkg.timeUs,
+          pct: pkg.pct,
+          isFirstParty: pkg.isFirstParty,
+          sampleCount: pkg.sampleCount,
+          depChain: pkg.depChain,
+          asyncTimeUs: pkg.asyncTimeUs,
+          asyncPct: pkg.asyncPct,
+          asyncOpCount: pkg.asyncOpCount,
+          files: files,
+          otherCount: fileOther
+        });
+      } else {
+        otherCount++;
+      }
+    }
+
+    return { packages: pkgs, otherCount: otherCount };
+  }
+
   function renderTable(packages, otherCount, totalTimeUs, totalAsyncTimeUs) {
     var rows = '';
     var isAsync = sortBy === 'async';
@@ -541,11 +891,17 @@ function generateJs(): string {
       var cls = pkg.isFirstParty ? 'first-party' : 'dependency';
       var barVal = isAsync ? (pkg.asyncTimeUs || 0) : pkg.timeUs;
       var pctVal = barTotal > 0 ? (barVal / barTotal) * 100 : 0;
-      rows += '<tr class="' + cls + '">' +
+      var barStyle = 'width:' + pctVal.toFixed(1) + '%';
+      var heat = '';
+      if (!pkg.isFirstParty) {
+        barStyle += ';background:' + heatColor(pctVal);
+        heat = heatAttr(pctVal);
+      }
+      rows += '<tr class="' + cls + '"' + heat + '>' +
         '<td class="pkg-name">' + escapeHtml(pkg.name) + depChainHtml(pkg.depChain) + '</td>' +
         '<td class="numeric">' + escapeHtml(formatTime(pkg.timeUs)) + '</td>' +
         '<td class="bar-cell"><div class="bar-container">' +
-          '<div class="bar-track"><div class="bar-fill" style="width:' + pctVal.toFixed(1) + '%"></div></div>' +
+          '<div class="bar-track"><div class="bar-fill" style="' + barStyle + '"></div></div>' +
           '<span class="bar-pct">' + escapeHtml(formatPct(barVal, barTotal)) + '</span>' +
         '</div></td>' +
         '<td class="numeric">' + pkg.sampleCount + '</td>';
@@ -584,6 +940,21 @@ function generateJs(): string {
     return ' <span class="tree-async">| ' + escapeHtml(formatTime(at)) + ' async &middot; ' + ac + ' ops</span>';
   }
 
+  function renderCallStackJs(stack, currentFnName) {
+    var html = '<div class="async-stack">';
+    for (var i = 0; i < stack.length; i++) {
+      var frame = stack[i];
+      var label = escapeHtml(frame.pkg) + ' &rsaquo; ' + escapeHtml(frame.file) + ' &rsaquo; ' + escapeHtml(frame.functionId);
+      var isCurrent = frame.functionId === currentFnName;
+      html += '<div class="async-stack-frame' + (isCurrent ? ' current' : '') + '">' + label + '</div>';
+      if (i < stack.length - 1) {
+        html += '<div class="async-stack-arrow">&darr;</div>';
+      }
+    }
+    html += '</div>';
+    return html;
+  }
+
   function renderTree(packages, otherCount, totalTimeUs, totalAsyncTimeUs) {
     var html = '<div class="tree">';
     var isAsync = sortBy === 'async';
@@ -593,7 +964,9 @@ function generateJs(): string {
       var pkg = packages[i];
       var fpCls = pkg.isFirstParty ? ' fp-pkg' : '';
       var pkgTime = isAsync ? (pkg.asyncTimeUs || 0) : pkg.timeUs;
-      html += '<details class="level-0' + fpCls + '"><summary>';
+      var pkgPct = pctTotal > 0 ? (pkgTime / pctTotal) * 100 : 0;
+      var heat = pkg.isFirstParty ? '' : heatAttr(pkgPct);
+      html += '<details class="level-0' + fpCls + '"' + heat + '><summary>';
       html += '<span class="tree-label pkg">pkg</span>';
       html += '<span class="tree-name">' + escapeHtml(pkg.name) + '</span>';
       html += depChainHtml(pkg.depChain);
@@ -614,13 +987,15 @@ function generateJs(): string {
         for (var k = 0; k < file.functions.length; k++) {
           var fn = file.functions[k];
           var fnTime = isAsync ? (fn.asyncTimeUs || 0) : fn.timeUs;
-          if (fn.sourceHtml) {
+          var hasExpandable = fn.sourceHtml || fn.asyncCallStack;
+          var csHtml = fn.asyncCallStack ? renderCallStackJs(fn.asyncCallStack, fn.name) : '';
+          if (hasExpandable) {
             html += '<details class="level-2 has-source"><summary>';
             html += '<span class="tree-label fn">fn</span> ';
             html += '<span class="tree-name">' + escapeHtml(fn.name) + '</span>';
             html += ' <span class="tree-stats">' + escapeHtml(formatTime(fnTime)) + ' &middot; ' + escapeHtml(formatPct(fnTime, pctTotal)) + ' &middot; ' + fn.sampleCount + ' samples</span>';
             html += asyncStats(fn);
-            html += '</summary>' + fn.sourceHtml + '</details>';
+            html += '</summary>' + csHtml + (fn.sourceHtml || '') + '</details>';
           } else {
             html += '<div class="level-2">';
             html += '<span class="tree-label fn">fn</span> ';
@@ -654,14 +1029,26 @@ function generateJs(): string {
   }
 
   var currentThreshold = 5;
+  var currentQuery = '';
 
   function update(pct) {
     currentThreshold = pct;
     var result = applyThreshold(DATA, pct);
+
+    if (currentQuery) {
+      result = filterByQuery(result, currentQuery);
+    }
+
     var summaryEl = document.getElementById('summary-container');
     var treeEl = document.getElementById('tree-container');
     if (summaryEl) summaryEl.innerHTML = renderTable(result.packages, result.otherCount, DATA.totalTimeUs, DATA.totalAsyncTimeUs);
-    if (treeEl) treeEl.innerHTML = renderTree(result.packages, result.otherCount, DATA.totalTimeUs, DATA.totalAsyncTimeUs);
+    if (treeEl) {
+      treeEl.innerHTML = renderTree(result.packages, result.otherCount, DATA.totalTimeUs, DATA.totalAsyncTimeUs);
+      if (currentQuery) {
+        var details = treeEl.querySelectorAll('details');
+        for (var d = 0; d < details.length; d++) details[d].open = true;
+      }
+    }
   }
 
   function updateSortButtons() {
@@ -677,6 +1064,7 @@ function generateJs(): string {
 
   document.addEventListener('DOMContentLoaded', function() {
     update(5);
+
     var slider = document.getElementById('threshold-slider');
     var label = document.getElementById('threshold-value');
     if (slider) {
@@ -695,6 +1083,36 @@ function generateJs(): string {
         update(currentThreshold);
       });
     }
+
+    /* Search */
+    var searchTimeout;
+    var searchInput = document.getElementById('search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(function() {
+          currentQuery = searchInput.value.toLowerCase().trim();
+          update(currentThreshold);
+        }, 150);
+      });
+    }
+
+    /* Expand / Collapse all */
+    var expandBtn = document.getElementById('expand-all');
+    if (expandBtn) {
+      expandBtn.addEventListener('click', function() {
+        var els = document.querySelectorAll('#tree-container details');
+        for (var d = 0; d < els.length; d++) els[d].open = true;
+      });
+    }
+
+    var collapseBtn = document.getElementById('collapse-all');
+    if (collapseBtn) {
+      collapseBtn.addEventListener('click', function() {
+        var els = document.querySelectorAll('#tree-container details');
+        for (var d = 0; d < els.length; d++) els[d].open = false;
+      });
+    }
   });
 })();
 `;
@@ -711,13 +1129,15 @@ function renderSummaryTable(
   for (const pkg of packages) {
     const cls = pkg.isFirstParty ? 'first-party' : 'dependency';
     const pctVal = totalTimeUs > 0 ? (pkg.timeUs / totalTimeUs) * 100 : 0;
+    const barColor = pkg.isFirstParty ? '' : `background:${heatColor(pctVal)};`;
+    const heatAttr = pkg.isFirstParty ? '' : heatDataAttr(pctVal);
     rows += `
-      <tr class="${cls}">
+      <tr class="${cls}"${heatAttr}>
         <td class="pkg-name">${escapeHtml(pkg.name)}${formatDepChain(pkg.depChain)}</td>
         <td class="numeric">${escapeHtml(formatTime(pkg.timeUs))}</td>
         <td class="bar-cell">
           <div class="bar-container">
-            <div class="bar-track"><div class="bar-fill" style="width:${pctVal.toFixed(1)}%"></div></div>
+            <div class="bar-track"><div class="bar-fill" style="width:${pctVal.toFixed(1)}%;${barColor}"></div></div>
             <span class="bar-pct">${escapeHtml(formatPct(pkg.timeUs, totalTimeUs))}</span>
           </div>
         </td>
@@ -763,6 +1183,21 @@ function formatAsyncStats(entry: { asyncTimeUs?: number; asyncOpCount?: number }
   return ` <span class="tree-async">| ${escapeHtml(formatTime(at))} async &middot; ${ac} ops</span>`;
 }
 
+function renderCallStack(stack: StackFrame[], currentFnName: string): string {
+  let html = '<div class="async-stack">';
+  for (let i = 0; i < stack.length; i++) {
+    const frame = stack[i];
+    const label = `${escapeHtml(frame.pkg)} &rsaquo; ${escapeHtml(frame.file)} &rsaquo; ${escapeHtml(frame.functionId)}`;
+    const isCurrent = frame.functionId === currentFnName;
+    html += `<div class="async-stack-frame${isCurrent ? ' current' : ''}">${label}</div>`;
+    if (i < stack.length - 1) {
+      html += '<div class="async-stack-arrow">&darr;</div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderTree(
   packages: PackageEntry[],
   otherCount: number,
@@ -773,7 +1208,8 @@ function renderTree(
 
   for (const pkg of packages) {
     const fpCls = pkg.isFirstParty ? ' fp-pkg' : '';
-    html += `<details class="level-0${fpCls}">`;
+    const heatAttr = pkg.isFirstParty ? '' : heatDataAttr(totalTimeUs > 0 ? (pkg.timeUs / totalTimeUs) * 100 : 0);
+    html += `<details class="level-0${fpCls}"${heatAttr}>`;
     html += `<summary>`;
     html += `<span class="tree-label pkg">pkg</span>`;
     html += `<span class="tree-name">${escapeHtml(pkg.name)}</span>`;
@@ -792,13 +1228,15 @@ function renderTree(
       html += `</summary>`;
 
       for (const fn of file.functions) {
-        if (fn.sourceHtml) {
+        const hasExpandable = fn.sourceHtml || fn.asyncCallStack;
+        const callStackHtml = fn.asyncCallStack ? renderCallStack(fn.asyncCallStack, fn.name) : '';
+        if (hasExpandable) {
           html += `<details class="level-2 has-source"><summary>`;
           html += `<span class="tree-label fn">fn</span> `;
           html += `<span class="tree-name">${escapeHtml(fn.name)}</span>`;
           html += ` <span class="tree-stats">${escapeHtml(formatTime(fn.timeUs))} &middot; ${escapeHtml(formatPct(fn.timeUs, totalTimeUs))} &middot; ${fn.sampleCount} samples</span>`;
           if (hasAsync) html += formatAsyncStats(fn);
-          html += `</summary>${fn.sourceHtml}</details>`;
+          html += `</summary>${callStackHtml}${fn.sourceHtml ?? ''}</details>`;
         } else {
           html += `<div class="level-2">`;
           html += `<span class="tree-label fn">fn</span> `;
@@ -855,6 +1293,20 @@ export function renderHtml(data: ReportData): string {
     metaLine += ` &middot; Async I/O wait: ${escapeHtml(formatTime(data.totalAsyncTimeUs!))}`;
   }
 
+  // Metric cards
+  let metricsHtml = '';
+  if (data.wallTimeUs) {
+    metricsHtml += `<div class="metric-card wall"><div class="metric-value">${escapeHtml(formatTime(data.wallTimeUs))}</div><div class="metric-label">Wall Time</div></div>`;
+  }
+  metricsHtml += `<div class="metric-card cpu"><div class="metric-value">${totalFormatted}</div><div class="metric-label">CPU Time</div></div>`;
+  if (data.wallTimeUs && data.wallTimeUs > 0) {
+    const util = ((data.totalTimeUs / data.wallTimeUs) * 100).toFixed(0);
+    metricsHtml += `<div class="metric-card utilization"><div class="metric-value">${util}%</div><div class="metric-label">CPU Utilization</div></div>`;
+  }
+  if (hasAsync) {
+    metricsHtml += `<div class="metric-card async"><div class="metric-value">${escapeHtml(formatTime(data.totalAsyncTimeUs!))}</div><div class="metric-label">Async I/O Wait</div></div>`;
+  }
+
   // Sanitize JSON for safe embedding in <script> — replace < to prevent </script> injection
   const safeJson = JSON.stringify(data).replace(/</g, '\\u003c');
 
@@ -870,12 +1322,15 @@ export function renderHtml(data: ReportData): string {
 <body>
   <h1>${titleName}</h1>
   <div class="meta">${metaLine}</div>
+  <div class="metrics">${metricsHtml}</div>
 
   <h2>Summary</h2>
-  <div class="threshold-control">
-    <label>Threshold</label>
-    <input type="range" id="threshold-slider" min="0" max="20" step="0.5" value="5">
-    <span id="threshold-value">5.0%</span>${hasAsync ? `
+  <div class="controls-bar">
+    <div class="threshold-control">
+      <label>Threshold</label>
+      <input type="range" id="threshold-slider" min="0" max="20" step="0.5" value="5">
+      <span id="threshold-value">5.0%</span>
+    </div>${hasAsync ? `
     <span class="sort-control">
       <label>Sort by</label>
       <span class="sort-toggle">
@@ -887,6 +1342,13 @@ export function renderHtml(data: ReportData): string {
   <div id="summary-container">${summaryTable}</div>
 
   <h2>Details</h2>
+  <div class="tree-controls">
+    <div class="search-wrapper">
+      <input type="text" class="search-input" id="search-input" placeholder="Filter packages...">
+    </div>
+    <button class="tree-btn" id="expand-all">Expand</button>
+    <button class="tree-btn" id="collapse-all">Collapse</button>
+  </div>
   <div id="tree-container">${tree}</div>
 
   <script>var __REPORT_DATA__ = ${safeJson};</script>

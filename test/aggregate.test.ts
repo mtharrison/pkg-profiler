@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SampleStore } from '../src/sample-store.js';
 import { aggregate } from '../src/reporter/aggregate.js';
-import type { ReportData } from '../src/types.js';
+import type { ReportData, StackFrame } from '../src/types.js';
 
 /**
  * Helper: populate a SampleStore with the canonical test data set.
@@ -242,5 +242,55 @@ describe('aggregate()', () => {
 
     expect(result.timestamp).toBeTypeOf('string');
     expect(result.timestamp.length).toBeGreaterThan(0);
+  });
+
+  it('attaches asyncCallStack to FunctionEntry when asyncCallStacks map is provided', () => {
+    const store = new SampleStore();
+    store.record('my-app', 'src/index.ts', 'loadData:42', 100_000);
+
+    const asyncStore = new SampleStore();
+    asyncStore.record('my-app', 'src/index.ts', 'loadData:42', 50_000, 2);
+
+    const callStacks = new Map<string, StackFrame[]>();
+    callStacks.set('my-app\0src/index.ts\0loadData:42', [
+      { pkg: 'my-app', file: 'src/main.ts', functionId: 'main:1' },
+      { pkg: 'my-app', file: 'src/profile.ts', functionId: 'fetchProfile:15' },
+      { pkg: 'my-app', file: 'src/index.ts', functionId: 'loadData:42' },
+    ]);
+
+    const result = aggregate(store, 'my-app', asyncStore, 50_000, undefined, undefined, callStacks);
+
+    const fn = result.packages[0].files[0].functions[0];
+    expect(fn.name).toBe('loadData:42');
+    expect(fn.asyncCallStack).toBeDefined();
+    expect(fn.asyncCallStack!.length).toBe(3);
+    expect(fn.asyncCallStack![0].functionId).toBe('main:1');
+    expect(fn.asyncCallStack![2].functionId).toBe('loadData:42');
+  });
+
+  it('does not attach asyncCallStack when key is not in the map', () => {
+    const store = new SampleStore();
+    store.record('my-app', 'src/index.ts', 'doWork:10', 100_000);
+
+    const callStacks = new Map<string, StackFrame[]>();
+    // Key for a different function
+    callStacks.set('my-app\0src/other.ts\0other:5', [
+      { pkg: 'my-app', file: 'src/other.ts', functionId: 'other:5' },
+    ]);
+
+    const result = aggregate(store, 'my-app', undefined, undefined, undefined, undefined, callStacks);
+
+    const fn = result.packages[0].files[0].functions[0];
+    expect(fn.asyncCallStack).toBeUndefined();
+  });
+
+  it('does not attach asyncCallStack when asyncCallStacks param is undefined', () => {
+    const store = new SampleStore();
+    store.record('my-app', 'src/index.ts', 'doWork:10', 100_000);
+
+    const result = aggregate(store, 'my-app');
+
+    const fn = result.packages[0].files[0].functions[0];
+    expect(fn.asyncCallStack).toBeUndefined();
   });
 });

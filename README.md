@@ -2,11 +2,11 @@
   <img src="assets/logo-removebg-preview.png" width="180" height="180" alt="where-you-at logo">
 </p>
 
-<h1 align="center">@mtharrison/pkg-profiler</h1>
+<h1 align="center">pkg-profiler</h1>
 
 <p align="center">
   <strong>Where's your wall time going? Find out in one call.</strong><br>
-  Zero-dependency sampling profiler that breaks down Node.js wall time by npm package.
+  Zero-dependency sampling profiler that breaks down Node.js wall time consumed by CPU and IO bound operations by npm package.
 </p>
 
 <p align="center">

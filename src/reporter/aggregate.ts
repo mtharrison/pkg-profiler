@@ -12,6 +12,7 @@ import type {
   PackageEntry,
   FileEntry,
   FunctionEntry,
+  StackFrame,
 } from '../types.js';
 import { resolveDependencyChains } from '../dep-chain.js';
 
@@ -38,7 +39,7 @@ function sumStore(store: SampleStore): number {
  * @param asyncStore - Optional SampleStore with async wait time data
  * @returns ReportData with all packages sorted desc by time, no threshold applied
  */
-export function aggregate(store: SampleStore, projectName: string, asyncStore?: SampleStore, globalAsyncTimeUs?: number, wallTimeUs?: number, projectRoot?: string): ReportData {
+export function aggregate(store: SampleStore, projectName: string, asyncStore?: SampleStore, globalAsyncTimeUs?: number, wallTimeUs?: number, projectRoot?: string, asyncCallStacks?: ReadonlyMap<string, ReadonlyArray<StackFrame>>): ReportData {
   // 1. Calculate total user-attributed time
   const totalTimeUs = sumStore(store);
   // Per-entry percentages use the raw sum so they add up to 100%
@@ -185,6 +186,14 @@ export function aggregate(store: SampleStore, projectName: string, asyncStore?: 
           entry.asyncTimeUs = funcAsyncTimeUs;
           entry.asyncPct = (funcAsyncTimeUs / totalAsyncTimeUs) * 100;
           entry.asyncOpCount = funcAsyncOpCount;
+        }
+
+        if (asyncCallStacks) {
+          const stackKey = `${packageName}\0${fileName}\0${funcName}`;
+          const stack = asyncCallStacks.get(stackKey);
+          if (stack) {
+            entry.asyncCallStack = stack as StackFrame[];
+          }
         }
 
         functions.push(entry);

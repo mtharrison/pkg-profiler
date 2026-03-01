@@ -303,6 +303,90 @@ describe('source code toggle', () => {
   });
 });
 
+describe('async call stack', () => {
+  const asyncCallStackData: ReportData = {
+    ...mockData,
+    totalAsyncTimeUs: 100_000,
+    packages: [
+      {
+        ...mockData.packages[0],
+        asyncTimeUs: 100_000,
+        asyncPct: 100,
+        asyncOpCount: 2,
+        files: [
+          {
+            ...mockData.packages[0].files[0],
+            asyncTimeUs: 100_000,
+            asyncPct: 100,
+            asyncOpCount: 2,
+            functions: [
+              {
+                ...mockData.packages[0].files[0].functions[0],
+                asyncTimeUs: 100_000,
+                asyncPct: 100,
+                asyncOpCount: 2,
+                asyncCallStack: [
+                  { pkg: 'my-app', file: 'src/main.ts', functionId: 'main:1' },
+                  { pkg: 'my-app', file: 'src/index.ts', functionId: 'main:1' },
+                ],
+              },
+              mockData.packages[0].files[0].functions[1],
+            ],
+          },
+        ],
+      },
+      mockData.packages[1],
+    ],
+  };
+
+  it('renders call stack markup for functions with asyncCallStack', () => {
+    const html = renderHtml(asyncCallStackData);
+    expect(html).toContain('class="async-stack"');
+    expect(html).toContain('class="async-stack-frame');
+  });
+
+  it('renders a current frame marker in the call stack', () => {
+    const html = renderHtml(asyncCallStackData);
+    expect(html).toContain('async-stack-frame current');
+  });
+
+  it('includes call stack CSS styles', () => {
+    const html = renderHtml(asyncCallStackData);
+    expect(html).toContain('.async-stack-toggle');
+    expect(html).toContain('.async-stack');
+    expect(html).toContain('.async-stack-frame');
+    expect(html).toContain('.async-stack-arrow');
+  });
+
+  it('makes function expandable (details) when it has asyncCallStack but no sourceHtml', () => {
+    const html = renderHtml(asyncCallStackData);
+    // The function with asyncCallStack should be rendered as <details> not <div>
+    expect(html).toContain('<details class="level-2 has-source">');
+    expect(html).toContain('async-stack');
+  });
+
+  it('embeds asyncCallStack in JSON data blob', () => {
+    const html = renderHtml(asyncCallStackData);
+    const match = html.match(/var __REPORT_DATA__ = (.+?);<\/script>/s);
+    expect(match).not.toBeNull();
+    const json = match![1].replace(/\\u003c/g, '<');
+    const parsed = JSON.parse(json) as ReportData;
+    const fn = parsed.packages[0].files[0].functions[0];
+    expect(fn.asyncCallStack).toBeDefined();
+    expect(fn.asyncCallStack!.length).toBe(2);
+    expect(fn.asyncCallStack![0].functionId).toBe('main:1');
+  });
+
+  it('does not render call stack for functions without asyncCallStack', () => {
+    const html = renderHtml(mockData);
+    // Check the tree section only (CSS will contain the class name as a style rule)
+    const treeStart = html.indexOf('id="tree-container"');
+    const treeEnd = html.indexOf('<script>', treeStart);
+    const treeSection = html.slice(treeStart, treeEnd);
+    expect(treeSection).not.toContain('class="async-stack"');
+  });
+});
+
 describe('sort control', () => {
   it('renders sort control when totalAsyncTimeUs is set', () => {
     const asyncData: ReportData = {

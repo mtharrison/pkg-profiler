@@ -11,6 +11,7 @@ import { SampleStore } from "./sample-store.js";
 import type {
   ProfileCallbackOptions,
   RawCallFrame,
+  StackFrame,
   StartOptions,
 } from "./types.js";
 
@@ -95,9 +96,11 @@ function stopSync(): PkgProfile {
   profiling = false;
 
   let globalAsyncTimeUs: number | undefined;
+  let asyncCallStacks: ReadonlyMap<string, ReadonlyArray<StackFrame>> | undefined;
   if (asyncTracker) {
     asyncTracker.disable();
     globalAsyncTimeUs = asyncTracker.mergedTotalUs;
+    asyncCallStacks = asyncTracker.asyncCallStacks;
     asyncTracker = null;
   }
 
@@ -112,6 +115,7 @@ function stopSync(): PkgProfile {
     globalAsyncTimeUs,
     wallTimeUs,
     cwd,
+    asyncCallStacks,
   );
   store.clear();
   asyncStore.clear();

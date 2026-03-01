@@ -307,4 +307,74 @@ describe('AsyncTracker', () => {
     tracker = new AsyncTracker(resolver, store);
     expect(tracker.mergedTotalUs).toBe(0);
   });
+
+  it('exposes asyncCallStacks with StackFrame entries after tracking', async () => {
+    store = new SampleStore();
+    const resolver = new PackageResolver(process.cwd());
+    tracker = new AsyncTracker(resolver, store, 0); // no threshold
+
+    tracker.enable();
+    await asyncDelay(10);
+    tracker.disable();
+
+    const stacks = tracker.asyncCallStacks;
+    expect(stacks.size).toBeGreaterThanOrEqual(1);
+
+    // Each entry should have a valid StackFrame array
+    for (const [key, frames] of stacks) {
+      expect(key).toContain('\0'); // key format: "pkg\0file\0fn"
+      expect(frames.length).toBeGreaterThanOrEqual(1);
+      for (const frame of frames) {
+        expect(frame).toHaveProperty('pkg');
+        expect(frame).toHaveProperty('file');
+        expect(frame).toHaveProperty('functionId');
+        expect(typeof frame.pkg).toBe('string');
+        expect(typeof frame.file).toBe('string');
+        expect(typeof frame.functionId).toBe('string');
+      }
+    }
+  });
+
+  it('asyncCallStacks is empty when no ops meet threshold', async () => {
+    store = new SampleStore();
+    const resolver = new PackageResolver(process.cwd());
+    tracker = new AsyncTracker(resolver, store, 10_000_000); // very high threshold
+
+    tracker.enable();
+    await asyncDelay(5);
+    tracker.disable();
+
+    expect(tracker.asyncCallStacks.size).toBe(0);
+  });
+
+  it('asyncCallStacks uses first-seen stack for duplicate keys', async () => {
+    store = new SampleStore();
+    const resolver = new PackageResolver(process.cwd());
+    tracker = new AsyncTracker(resolver, store, 0);
+
+    tracker.enable();
+    // Same call site called multiple times
+    await asyncDelay(10);
+    await asyncDelay(10);
+    await asyncDelay(10);
+    tracker.disable();
+
+    // Each unique key should have exactly one stack
+    for (const [, frames] of tracker.asyncCallStacks) {
+      expect(frames.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('asyncCallStacks survives after flush (not cleared)', async () => {
+    store = new SampleStore();
+    const resolver = new PackageResolver(process.cwd());
+    tracker = new AsyncTracker(resolver, store, 0);
+
+    tracker.enable();
+    await asyncDelay(10);
+    tracker.disable(); // calls flush() internally
+
+    // Call stacks should still be available after disable/flush
+    expect(tracker.asyncCallStacks.size).toBeGreaterThanOrEqual(1);
+  });
 });

@@ -32,8 +32,15 @@ export interface ReportEntry {
   asyncOpCount?: number;  // number of async operations attributed
 }
 
+export interface StackFrame {
+  pkg: string;
+  file: string;
+  functionId: string;
+}
+
 export interface FunctionEntry extends ReportEntry {
   sourceHtml?: string;
+  asyncCallStack?: StackFrame[];
 }
 
 export interface FileEntry extends ReportEntry {

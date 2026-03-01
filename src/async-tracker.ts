@@ -13,6 +13,7 @@ import { createHook } from 'node:async_hooks';
 import type { AsyncHook } from 'node:async_hooks';
 import type { PackageResolver } from './package-resolver.js';
 import type { SampleStore } from './sample-store.js';
+import type { StackFrame } from './types.js';
 
 /** Async resource types worth tracking — I/O and timers, not promises. */
 const TRACKED_TYPES = new Set([
@@ -38,6 +39,7 @@ interface PendingOp {
   pkg: string;
   file: string;
   fn: string;
+  callStack: StackFrame[];
 }
 
 export interface Interval {
@@ -134,6 +136,8 @@ export class AsyncTracker {
 
   /** Merged global total set after flush() */
   private _mergedTotalUs = 0;
+  /** Call stacks keyed by "pkg\0file\0fn", first-seen wins */
+  private _callStacks = new Map<string, StackFrame[]>();
 
   /**
    * @param resolver - PackageResolver for mapping file paths to packages
@@ -148,6 +152,11 @@ export class AsyncTracker {
   /** Merged global async total in microseconds, available after disable(). */
   get mergedTotalUs(): number {
     return this._mergedTotalUs;
+  }
+
+  /** Initiating call stacks keyed by "pkg\0file\0fn". Available after tracking. */
+  get asyncCallStacks(): ReadonlyMap<string, ReadonlyArray<StackFrame>> {
+    return this._callStacks;
   }
 
   enable(): void {
@@ -169,29 +178,37 @@ export class AsyncTracker {
         const stack = holder.stack;
         if (!stack) return;
 
-        // Find the first user-code frame (skip async_hooks internals)
+        // Parse all user-code frames (skip async_hooks internals)
         const lines = stack.split('\n');
-        let parsed: { filePath: string; functionId: string } | null = null;
+        let firstParsed: { filePath: string; functionId: string } | null = null;
+        const callStack: StackFrame[] = [];
         for (let i = 1; i < lines.length; i++) {
           const result = parseStackLine(lines[i]!);
           if (result) {
             // Skip frames inside this module
             if (result.filePath.includes('async-tracker')) continue;
-            parsed = result;
-            break;
+            const { packageName, relativePath } = this.resolver.resolve(result.filePath);
+            if (!firstParsed) {
+              firstParsed = result;
+            }
+            callStack.push({ pkg: packageName, file: relativePath, functionId: result.functionId });
           }
         }
 
-        if (!parsed) return;
+        if (!firstParsed) return;
 
-        // Resolve to package
-        const { packageName, relativePath } = this.resolver.resolve(parsed.filePath);
+        // Use first user-code frame as the attribution target
+        const { packageName, relativePath } = this.resolver.resolve(firstParsed.filePath);
+
+        // Reverse call stack for display: outermost caller first (top-down)
+        callStack.reverse();
 
         this.pending.set(asyncId, {
           startHrtime: process.hrtime(),
           pkg: packageName,
           file: relativePath,
-          fn: parsed.functionId,
+          fn: firstParsed.functionId,
+          callStack,
         });
       },
 
@@ -216,6 +233,11 @@ export class AsyncTracker {
           arr.push(interval);
 
           this.globalIntervals.push(interval);
+
+          // Store call stack (first-seen wins)
+          if (op.callStack.length > 0 && !this._callStacks.has(key)) {
+            this._callStacks.set(key, op.callStack);
+          }
         }
 
         this.pending.delete(asyncId);
