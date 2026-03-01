@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo-removebg-preview.png" width="250"" alt="where-you-at logo">
+  <img src="assets/logo-removebg-preview.png" width="200"" alt="where-you-at logo">
 </p>
 
 <p align="center"><strong><span style="font-size:2em">@mtharrison/pkg-profiler</span></strong></p>
@@ -26,7 +26,7 @@
 <h3 align="center"><a href="#installation">Installation</a> &nbsp;&middot;&nbsp; <a href="#quick-start">Quick Start</a> &nbsp;&middot;&nbsp; <a href="#api">API</a> &nbsp;&middot;&nbsp; <a href="#async-io-tracking">Async I/O Tracking</a> &nbsp;&middot;&nbsp; <a href="#how-it-works">How It Works</a></h3>
 
 <p align="center">
-  <img src="assets/report-screenshot.png" width="70" alt="Example HTML report showing per-package wall time breakdown">
+  <img src="assets/report-screenshot.png" width="700" alt="Example HTML report showing per-package wall time breakdown">
 </p>
 
 ## Installation
