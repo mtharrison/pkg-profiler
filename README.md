@@ -4,8 +4,8 @@
 
 <h1 align="center">pkg-profiler</h1>
 
+<h3 align="center">See which packages own your wall time.</h3>
 <p align="center">
-  <strong>See which packages own your wall time.</strong><br>
   Zero-dependency sampling profiler that breaks down Node.js wall time consumed by CPU and IO bound operations by npm package.
 </p>
 
