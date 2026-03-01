@@ -1,27 +1,34 @@
+import { readFileSync } from "node:fs";
 import type { Profiler } from "node:inspector";
 import { Session } from "node:inspector/promises";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { AsyncTracker } from "./async-tracker.js";
 import { parseFrame } from "./frame-parser.js";
 import { PackageResolver } from "./package-resolver.js";
 import { PkgProfile } from "./pkg-profile.js";
 import { aggregate } from "./reporter/aggregate.js";
 import { SampleStore } from "./sample-store.js";
-import type { RawCallFrame, StartOptions, ProfileCallbackOptions } from "./types.js";
+import type {
+  ProfileCallbackOptions,
+  RawCallFrame,
+  StartOptions,
+} from "./types.js";
 
 // Module-level state -- lazy initialization
 let session: Session | null = null;
 let profiling = false;
 const store = new SampleStore();
+const asyncStore = new SampleStore();
 const resolver = new PackageResolver(process.cwd());
+let asyncTracker: AsyncTracker | null = null;
 
 function readProjectName(cwd: string): string {
   try {
-    const raw = readFileSync(join(cwd, 'package.json'), 'utf-8');
+    const raw = readFileSync(join(cwd, "package.json"), "utf-8");
     const pkg = JSON.parse(raw) as { name?: string };
-    return pkg.name ?? 'app';
+    return pkg.name ?? "app";
   } catch {
-    return 'app';
+    return "app";
   }
 }
 
@@ -50,6 +57,11 @@ export async function start(options?: StartOptions): Promise<void> {
 
   await session.post("Profiler.start");
   profiling = true;
+
+  if (options?.trackAsync) {
+    asyncTracker = new AsyncTracker(resolver, asyncStore);
+    asyncTracker.enable();
+  }
 }
 
 /**
@@ -74,11 +86,21 @@ export async function stop(): Promise<PkgProfile> {
   await session.post("Profiler.disable");
   profiling = false;
 
+  if (asyncTracker) {
+    asyncTracker.disable();
+    asyncTracker = null;
+  }
+
   processProfile(profile);
 
   const projectName = readProjectName(process.cwd());
-  const data = aggregate(store, projectName);
+  const data = aggregate(
+    store,
+    projectName,
+    asyncStore.packages.size > 0 ? asyncStore : undefined,
+  );
   store.clear();
+  asyncStore.clear();
 
   return new PkgProfile(data);
 }
@@ -93,6 +115,11 @@ export async function clear(): Promise<void> {
     profiling = false;
   }
   store.clear();
+  if (asyncTracker) {
+    asyncTracker.disable();
+    asyncTracker = null;
+  }
+  asyncStore.clear();
 }
 
 /**
@@ -101,7 +128,9 @@ export async function clear(): Promise<void> {
  * Overload 1: Profile a block of code — runs `fn`, stops the profiler, returns PkgProfile.
  * Overload 2: Long-running mode — starts profiler, registers exit handlers, calls `onExit` on shutdown.
  */
-export async function profile(fn: () => void | Promise<void>): Promise<PkgProfile>;
+export async function profile(
+  fn: () => void | Promise<void>,
+): Promise<PkgProfile>;
 export async function profile(options: ProfileCallbackOptions): Promise<void>;
 export async function profile(
   fnOrOptions: (() => void | Promise<void>) | ProfileCallbackOptions,
@@ -128,6 +157,7 @@ export async function profile(
     process.removeListener("SIGINT", onSignal);
     process.removeListener("SIGTERM", onSignal);
     process.removeListener("beforeExit", onBeforeExit);
+    process.removeListener("exit", onBeforeExit);
 
     const result = await stop();
     onExit(result);
@@ -137,12 +167,17 @@ export async function profile(
     }
   };
 
-  const onSignal = (signal: NodeJS.Signals) => { void handler(signal); };
-  const onBeforeExit = () => { void handler(); };
+  const onSignal = (signal: NodeJS.Signals) => {
+    void handler(signal);
+  };
+  const onBeforeExit = () => {
+    void handler();
+  };
 
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
   process.once("beforeExit", onBeforeExit);
+  process.once("exit", onBeforeExit);
 }
 
 /**

@@ -23,12 +23,14 @@ export class PkgProfile {
   readonly timestamp: string;
   /** Total sampled wall time in microseconds */
   readonly totalTimeUs: number;
-  /** Package breakdown sorted by time descending */
+  /** Package breakdown sorted by time descending (all packages, no threshold applied) */
   readonly packages: PackageEntry[];
-  /** Number of packages below the reporting threshold */
+  /** Always 0 — threshold filtering is now applied client-side in the HTML report */
   readonly otherCount: number;
   /** Project name (from package.json) */
   readonly projectName: string;
+  /** Total async wait time in microseconds (undefined when async tracking not enabled) */
+  readonly totalAsyncTimeUs?: number;
 
   /** @internal */
   constructor(data: ReportData) {
@@ -37,6 +39,7 @@ export class PkgProfile {
     this.packages = data.packages;
     this.otherCount = data.otherCount;
     this.projectName = data.projectName;
+    this.totalAsyncTimeUs = data.totalAsyncTimeUs;
   }
 
   /**
@@ -52,6 +55,7 @@ export class PkgProfile {
       packages: this.packages,
       otherCount: this.otherCount,
       projectName: this.projectName,
+      totalAsyncTimeUs: this.totalAsyncTimeUs,
     };
     const html = renderHtml(data);
 

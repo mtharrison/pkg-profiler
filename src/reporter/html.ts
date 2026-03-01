@@ -1,8 +1,9 @@
 /**
  * HTML renderer for the profiling report.
  *
- * Generates a self-contained HTML file (inline CSS, no external dependencies)
- * with a summary table and expandable Package > File > Function tree.
+ * Generates a self-contained HTML file (inline CSS/JS, no external dependencies)
+ * with a summary table, expandable Package > File > Function tree, and an
+ * interactive threshold slider that filters data client-side.
  */
 
 import type { ReportData, PackageEntry, FileEntry } from '../types.js';
@@ -21,6 +22,7 @@ function generateCss(): string {
       --bar-track: #e8eaed;
       --bar-fill: #5b8def;
       --bar-fill-fp: #3b6cf5;
+      --bar-fill-async: #f5943b;
       --other-text: #a0a4b8;
       --table-header-bg: #f4f5f7;
       --shadow: 0 1px 3px rgba(0,0,0,0.06);
@@ -58,6 +60,59 @@ function generateCss(): string {
       font-weight: 600;
       margin-bottom: 0.75rem;
       margin-top: 2rem;
+    }
+
+    /* Threshold slider */
+    .threshold-control {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+    }
+
+    .threshold-control label {
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.8rem;
+    }
+
+    .threshold-control input[type="range"] {
+      flex: 1;
+      max-width: 240px;
+      height: 8px;
+      appearance: none;
+      -webkit-appearance: none;
+      background: var(--bar-track);
+      border-radius: 4px;
+      outline: none;
+    }
+
+    .threshold-control input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--bar-fill);
+      cursor: pointer;
+    }
+
+    .threshold-control input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--bar-fill);
+      cursor: pointer;
+      border: none;
+    }
+
+    .threshold-control span {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      min-width: 3.5em;
     }
 
     /* Summary table */
@@ -98,6 +153,7 @@ function generateCss(): string {
 
     td.pkg-name { font-family: var(--font-mono); font-size: 0.85rem; }
     td.numeric { text-align: right; font-family: var(--font-mono); font-size: 0.85rem; }
+    td.async-col { color: var(--bar-fill-async); }
 
     .bar-cell {
       width: 30%;
@@ -211,6 +267,13 @@ function generateCss(): string {
       flex-shrink: 0;
     }
 
+    .tree-async {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--bar-fill-async);
+      flex-shrink: 0;
+    }
+
     /* Level indentation */
     .level-0 > summary { padding-left: 0.75rem; }
     .level-1 > summary { padding-left: 2rem; }
@@ -239,10 +302,231 @@ function generateCss(): string {
   `;
 }
 
+function generateJs(): string {
+  return `
+(function() {
+  var DATA = window.__REPORT_DATA__;
+  if (!DATA) return;
+  var HAS_ASYNC = !!(DATA.totalAsyncTimeUs && DATA.totalAsyncTimeUs > 0);
+
+  function formatTime(us) {
+    if (us === 0) return '0ms';
+    var ms = us / 1000;
+    if (ms >= 1000) return (ms / 1000).toFixed(2) + 's';
+    var rounded = Math.round(ms);
+    return (rounded < 1 ? 1 : rounded) + 'ms';
+  }
+
+  function formatPct(us, totalUs) {
+    if (totalUs === 0) return '0.0%';
+    return ((us / totalUs) * 100).toFixed(1) + '%';
+  }
+
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function applyThreshold(data, pct) {
+    var threshold = data.totalTimeUs * (pct / 100);
+    var filtered = [];
+    var otherCount = 0;
+
+    for (var i = 0; i < data.packages.length; i++) {
+      var pkg = data.packages[i];
+      if (pkg.timeUs < threshold) {
+        otherCount++;
+        continue;
+      }
+
+      var files = [];
+      var fileOtherCount = 0;
+
+      for (var j = 0; j < pkg.files.length; j++) {
+        var file = pkg.files[j];
+        if (file.timeUs < threshold) {
+          fileOtherCount++;
+          continue;
+        }
+
+        var functions = [];
+        var funcOtherCount = 0;
+
+        for (var k = 0; k < file.functions.length; k++) {
+          var fn = file.functions[k];
+          if (fn.timeUs < threshold) {
+            funcOtherCount++;
+            continue;
+          }
+          functions.push(fn);
+        }
+
+        files.push({
+          name: file.name,
+          timeUs: file.timeUs,
+          pct: file.pct,
+          sampleCount: file.sampleCount,
+          asyncTimeUs: file.asyncTimeUs,
+          asyncPct: file.asyncPct,
+          asyncOpCount: file.asyncOpCount,
+          functions: functions,
+          otherCount: funcOtherCount
+        });
+      }
+
+      filtered.push({
+        name: pkg.name,
+        timeUs: pkg.timeUs,
+        pct: pkg.pct,
+        isFirstParty: pkg.isFirstParty,
+        sampleCount: pkg.sampleCount,
+        asyncTimeUs: pkg.asyncTimeUs,
+        asyncPct: pkg.asyncPct,
+        asyncOpCount: pkg.asyncOpCount,
+        files: files,
+        otherCount: fileOtherCount
+      });
+    }
+
+    return { packages: filtered, otherCount: otherCount };
+  }
+
+  function renderTable(packages, otherCount, totalTimeUs) {
+    var rows = '';
+    for (var i = 0; i < packages.length; i++) {
+      var pkg = packages[i];
+      var cls = pkg.isFirstParty ? 'first-party' : 'dependency';
+      var pctVal = totalTimeUs > 0 ? (pkg.timeUs / totalTimeUs) * 100 : 0;
+      rows += '<tr class="' + cls + '">' +
+        '<td class="pkg-name">' + escapeHtml(pkg.name) + '</td>' +
+        '<td class="numeric">' + escapeHtml(formatTime(pkg.timeUs)) + '</td>' +
+        '<td class="bar-cell"><div class="bar-container">' +
+          '<div class="bar-track"><div class="bar-fill" style="width:' + pctVal.toFixed(1) + '%"></div></div>' +
+          '<span class="bar-pct">' + escapeHtml(formatPct(pkg.timeUs, totalTimeUs)) + '</span>' +
+        '</div></td>' +
+        '<td class="numeric">' + pkg.sampleCount + '</td>';
+      if (HAS_ASYNC) {
+        rows += '<td class="numeric async-col">' + escapeHtml(formatTime(pkg.asyncTimeUs || 0)) + '</td>' +
+          '<td class="numeric async-col">' + (pkg.asyncOpCount || 0) + '</td>';
+      }
+      rows += '</tr>';
+    }
+
+    if (otherCount > 0) {
+      rows += '<tr class="other-row">' +
+        '<td class="pkg-name">Other (' + otherCount + ' items)</td>' +
+        '<td class="numeric"></td>' +
+        '<td class="bar-cell"></td>' +
+        '<td class="numeric"></td>';
+      if (HAS_ASYNC) {
+        rows += '<td class="numeric"></td><td class="numeric"></td>';
+      }
+      rows += '</tr>';
+    }
+
+    var headers = '<th>Package</th><th>Wall Time</th><th>% of Total</th><th>Samples</th>';
+    if (HAS_ASYNC) {
+      headers += '<th>Async Wait</th><th>Async Ops</th>';
+    }
+
+    return '<table><thead><tr>' + headers + '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function asyncStats(entry) {
+    if (!HAS_ASYNC) return '';
+    var at = entry.asyncTimeUs || 0;
+    var ac = entry.asyncOpCount || 0;
+    if (at === 0 && ac === 0) return '';
+    return ' <span class="tree-async">| ' + escapeHtml(formatTime(at)) + ' async &middot; ' + ac + ' ops</span>';
+  }
+
+  function renderTree(packages, otherCount, totalTimeUs) {
+    var html = '<div class="tree">';
+
+    for (var i = 0; i < packages.length; i++) {
+      var pkg = packages[i];
+      var fpCls = pkg.isFirstParty ? ' fp-pkg' : '';
+      html += '<details class="level-0' + fpCls + '"><summary>';
+      html += '<span class="tree-label pkg">pkg</span>';
+      html += '<span class="tree-name">' + escapeHtml(pkg.name) + '</span>';
+      html += '<span class="tree-stats">' + escapeHtml(formatTime(pkg.timeUs)) + ' &middot; ' + escapeHtml(formatPct(pkg.timeUs, totalTimeUs)) + ' &middot; ' + pkg.sampleCount + ' samples</span>';
+      html += asyncStats(pkg);
+      html += '</summary>';
+
+      for (var j = 0; j < pkg.files.length; j++) {
+        var file = pkg.files[j];
+        html += '<details class="level-1"><summary>';
+        html += '<span class="tree-label file">file</span>';
+        html += '<span class="tree-name">' + escapeHtml(file.name) + '</span>';
+        html += '<span class="tree-stats">' + escapeHtml(formatTime(file.timeUs)) + ' &middot; ' + escapeHtml(formatPct(file.timeUs, totalTimeUs)) + ' &middot; ' + file.sampleCount + ' samples</span>';
+        html += asyncStats(file);
+        html += '</summary>';
+
+        for (var k = 0; k < file.functions.length; k++) {
+          var fn = file.functions[k];
+          html += '<div class="level-2">';
+          html += '<span class="tree-label fn">fn</span> ';
+          html += '<span class="tree-name">' + escapeHtml(fn.name) + '</span>';
+          html += ' <span class="tree-stats">' + escapeHtml(formatTime(fn.timeUs)) + ' &middot; ' + escapeHtml(formatPct(fn.timeUs, totalTimeUs)) + ' &middot; ' + fn.sampleCount + ' samples</span>';
+          html += asyncStats(fn);
+          html += '</div>';
+        }
+
+        if (file.otherCount > 0) {
+          html += '<div class="other-item indent-2">Other (' + file.otherCount + ' items)</div>';
+        }
+
+        html += '</details>';
+      }
+
+      if (pkg.otherCount > 0) {
+        html += '<div class="other-item indent-1">Other (' + pkg.otherCount + ' items)</div>';
+      }
+
+      html += '</details>';
+    }
+
+    if (otherCount > 0) {
+      html += '<div class="other-item">Other (' + otherCount + ' packages)</div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  function update(pct) {
+    var result = applyThreshold(DATA, pct);
+    var summaryEl = document.getElementById('summary-container');
+    var treeEl = document.getElementById('tree-container');
+    if (summaryEl) summaryEl.innerHTML = renderTable(result.packages, result.otherCount, DATA.totalTimeUs);
+    if (treeEl) treeEl.innerHTML = renderTree(result.packages, result.otherCount, DATA.totalTimeUs);
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    update(5);
+    var slider = document.getElementById('threshold-slider');
+    var label = document.getElementById('threshold-value');
+    if (slider) {
+      slider.addEventListener('input', function() {
+        var val = parseFloat(slider.value);
+        if (label) label.textContent = val.toFixed(1) + '%';
+        update(val);
+      });
+    }
+  });
+})();
+`;
+}
+
 function renderSummaryTable(
   packages: PackageEntry[],
   otherCount: number,
   totalTimeUs: number,
+  hasAsync: boolean,
 ): string {
   let rows = '';
 
@@ -259,7 +543,9 @@ function renderSummaryTable(
             <span class="bar-pct">${escapeHtml(formatPct(pkg.timeUs, totalTimeUs))}</span>
           </div>
         </td>
-        <td class="numeric">${pkg.sampleCount}</td>
+        <td class="numeric">${pkg.sampleCount}</td>${hasAsync ? `
+        <td class="numeric async-col">${escapeHtml(formatTime(pkg.asyncTimeUs ?? 0))}</td>
+        <td class="numeric async-col">${pkg.asyncOpCount ?? 0}</td>` : ''}
       </tr>`;
   }
 
@@ -269,7 +555,9 @@ function renderSummaryTable(
         <td class="pkg-name">Other (${otherCount} items)</td>
         <td class="numeric"></td>
         <td class="bar-cell"></td>
+        <td class="numeric"></td>${hasAsync ? `
         <td class="numeric"></td>
+        <td class="numeric"></td>` : ''}
       </tr>`;
   }
 
@@ -280,7 +568,9 @@ function renderSummaryTable(
           <th>Package</th>
           <th>Wall Time</th>
           <th>% of Total</th>
-          <th>Samples</th>
+          <th>Samples</th>${hasAsync ? `
+          <th>Async Wait</th>
+          <th>Async Ops</th>` : ''}
         </tr>
       </thead>
       <tbody>${rows}
@@ -288,10 +578,18 @@ function renderSummaryTable(
     </table>`;
 }
 
+function formatAsyncStats(entry: { asyncTimeUs?: number; asyncOpCount?: number }): string {
+  const at = entry.asyncTimeUs ?? 0;
+  const ac = entry.asyncOpCount ?? 0;
+  if (at === 0 && ac === 0) return '';
+  return ` <span class="tree-async">| ${escapeHtml(formatTime(at))} async &middot; ${ac} ops</span>`;
+}
+
 function renderTree(
   packages: PackageEntry[],
   otherCount: number,
   totalTimeUs: number,
+  hasAsync: boolean,
 ): string {
   let html = '<div class="tree">';
 
@@ -302,6 +600,7 @@ function renderTree(
     html += `<span class="tree-label pkg">pkg</span>`;
     html += `<span class="tree-name">${escapeHtml(pkg.name)}</span>`;
     html += `<span class="tree-stats">${escapeHtml(formatTime(pkg.timeUs))} &middot; ${escapeHtml(formatPct(pkg.timeUs, totalTimeUs))} &middot; ${pkg.sampleCount} samples</span>`;
+    if (hasAsync) html += formatAsyncStats(pkg);
     html += `</summary>`;
 
     for (const file of pkg.files) {
@@ -310,6 +609,7 @@ function renderTree(
       html += `<span class="tree-label file">file</span>`;
       html += `<span class="tree-name">${escapeHtml(file.name)}</span>`;
       html += `<span class="tree-stats">${escapeHtml(formatTime(file.timeUs))} &middot; ${escapeHtml(formatPct(file.timeUs, totalTimeUs))} &middot; ${file.sampleCount} samples</span>`;
+      if (hasAsync) html += formatAsyncStats(file);
       html += `</summary>`;
 
       for (const fn of file.functions) {
@@ -317,6 +617,7 @@ function renderTree(
         html += `<span class="tree-label fn">fn</span> `;
         html += `<span class="tree-name">${escapeHtml(fn.name)}</span>`;
         html += ` <span class="tree-stats">${escapeHtml(formatTime(fn.timeUs))} &middot; ${escapeHtml(formatPct(fn.timeUs, totalTimeUs))} &middot; ${fn.sampleCount} samples</span>`;
+        if (hasAsync) html += formatAsyncStats(fn);
         html += `</div>`;
       }
 
@@ -346,14 +647,23 @@ function renderTree(
  * Render a complete self-contained HTML report from aggregated profiling data.
  *
  * @param data - Aggregated report data (packages, timing, project name).
- * @returns A full HTML document string with inline CSS and no external dependencies.
+ * @returns A full HTML document string with inline CSS/JS and no external dependencies.
  */
 export function renderHtml(data: ReportData): string {
-  const summaryTable = renderSummaryTable(data.packages, data.otherCount, data.totalTimeUs);
-  const tree = renderTree(data.packages, data.otherCount, data.totalTimeUs);
+  const hasAsync = !!(data.totalAsyncTimeUs && data.totalAsyncTimeUs > 0);
+  const summaryTable = renderSummaryTable(data.packages, data.otherCount, data.totalTimeUs, hasAsync);
+  const tree = renderTree(data.packages, data.otherCount, data.totalTimeUs, hasAsync);
   const totalFormatted = escapeHtml(formatTime(data.totalTimeUs));
 
   const titleName = escapeHtml(data.projectName);
+
+  let metaLine = `Generated ${escapeHtml(data.timestamp)} &middot; Total wall time: ${totalFormatted}`;
+  if (hasAsync) {
+    metaLine += ` &middot; Total async wait: ${escapeHtml(formatTime(data.totalAsyncTimeUs!))}`;
+  }
+
+  // Sanitize JSON for safe embedding in <script> — replace < to prevent </script> injection
+  const safeJson = JSON.stringify(data).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -366,13 +676,21 @@ export function renderHtml(data: ReportData): string {
 </head>
 <body>
   <h1>${titleName}</h1>
-  <div class="meta">Generated ${escapeHtml(data.timestamp)} &middot; Total wall time: ${totalFormatted}</div>
+  <div class="meta">${metaLine}</div>
 
   <h2>Summary</h2>
-  ${summaryTable}
+  <div class="threshold-control">
+    <label>Threshold</label>
+    <input type="range" id="threshold-slider" min="0" max="20" step="0.5" value="5">
+    <span id="threshold-value">5.0%</span>
+  </div>
+  <div id="summary-container">${summaryTable}</div>
 
   <h2>Details</h2>
-  ${tree}
+  <div id="tree-container">${tree}</div>
+
+  <script>var __REPORT_DATA__ = ${safeJson};</script>
+  <script>${generateJs()}</script>
 </body>
 </html>`;
 }

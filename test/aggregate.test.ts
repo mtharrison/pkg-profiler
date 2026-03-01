@@ -13,10 +13,7 @@ import type { ReportData } from '../src/types.js';
  *   "lodash"  -> "index.js"        -> { "map:10": 30_000 }                          = 30_000
  *   "tiny-lib"-> "lib/util.js"     -> { "compute:5": 10_000 }                       = 10_000
  *
- * Total = 990_000 us. 5% threshold = 49_500 us.
- *
- * Above threshold at package level: my-app (600k), express (350k)
- * Below threshold at package level: lodash (30k), tiny-lib (10k)
+ * Total = 990_000 us.
  */
 function buildCanonicalStore(): SampleStore {
   const store = new SampleStore();
@@ -74,24 +71,27 @@ describe('aggregate()', () => {
     expect(result.totalTimeUs).toBe(990_000);
   });
 
-  it('sorts packages by timeUs descending', () => {
+  it('sorts packages by timeUs descending and includes all packages', () => {
     const store = buildCanonicalStore();
     const result = aggregate(store, 'my-app');
 
-    // Only above-threshold packages appear
-    expect(result.packages.length).toBe(2);
+    expect(result.packages.length).toBe(4);
     expect(result.packages[0].name).toBe('my-app');
     expect(result.packages[0].timeUs).toBe(600_000);
     expect(result.packages[1].name).toBe('express');
     expect(result.packages[1].timeUs).toBe(350_000);
+    expect(result.packages[2].name).toBe('lodash');
+    expect(result.packages[2].timeUs).toBe(30_000);
+    expect(result.packages[3].name).toBe('tiny-lib');
+    expect(result.packages[3].timeUs).toBe(10_000);
   });
 
-  it('applies 5% threshold at package level and counts "other"', () => {
+  it('no longer applies threshold at package level — otherCount is always 0', () => {
     const store = buildCanonicalStore();
     const result = aggregate(store, 'my-app');
 
-    // lodash (30k = 3.03%) and tiny-lib (10k = 1.01%) are below 5%
-    expect(result.otherCount).toBe(2);
+    expect(result.otherCount).toBe(0);
+    expect(result.packages.length).toBe(4);
   });
 
   it('computes pct relative to totalTimeUs at package level', () => {
@@ -124,9 +124,7 @@ describe('aggregate()', () => {
     expect(express.files[1].timeUs).toBe(50_000);
   });
 
-  it('applies 5% threshold at file level relative to total and counts "other"', () => {
-    // express/lib/app.js = 50_000. 50_000/990_000 = 5.05%, just above threshold.
-    // All files in this canonical set are >= 50k so none drop out.
+  it('no longer applies threshold at file level — all files present, otherCount 0', () => {
     const store = buildCanonicalStore();
     const result = aggregate(store, 'my-app');
 
@@ -135,19 +133,20 @@ describe('aggregate()', () => {
     expect(express.files.length).toBe(2);
   });
 
-  it('applies 5% threshold at file level - drops files below threshold', () => {
+  it('includes all files regardless of size relative to total', () => {
     const store = new SampleStore();
     // big-pkg: "main.ts" -> fn:1 (800_000us)
     store.record('big-pkg', 'main.ts', 'fn:1', 800_000);
-    // big-pkg: "tiny.ts" -> fn:2 (10_000us) -- 10k / 810k = 1.2%, below 5%
+    // big-pkg: "tiny.ts" -> fn:2 (10_000us) -- previously below 5% threshold
     store.record('big-pkg', 'tiny.ts', 'fn:2', 10_000);
 
     const result = aggregate(store, 'big-pkg');
     const pkg = result.packages[0];
 
-    expect(pkg.files.length).toBe(1);
+    expect(pkg.files.length).toBe(2);
     expect(pkg.files[0].name).toBe('main.ts');
-    expect(pkg.otherCount).toBe(1);
+    expect(pkg.files[1].name).toBe('tiny.ts');
+    expect(pkg.otherCount).toBe(0);
   });
 
   it('sorts functions within a file by timeUs descending', () => {
@@ -163,20 +162,19 @@ describe('aggregate()', () => {
     expect(indexTs.functions[1].timeUs).toBe(100_000);
   });
 
-  it('applies 5% threshold at function level relative to total and counts "other"', () => {
+  it('no longer applies threshold at function level — all functions present, otherCount 0', () => {
     const store = new SampleStore();
     // pkg: "file.ts" -> big:1 (900_000), small:2 (10_000)
-    // total = 910_000, threshold = 45_500
-    // big:1 is above, small:2 is below
     store.record('pkg', 'file.ts', 'big:1', 900_000);
     store.record('pkg', 'file.ts', 'small:2', 10_000);
 
     const result = aggregate(store, 'pkg');
     const file = result.packages[0].files[0];
 
-    expect(file.functions.length).toBe(1);
+    expect(file.functions.length).toBe(2);
     expect(file.functions[0].name).toBe('big:1');
-    expect(file.otherCount).toBe(1);
+    expect(file.functions[1].name).toBe('small:2');
+    expect(file.otherCount).toBe(0);
   });
 
   it('populates sampleCount at package level', () => {
@@ -212,7 +210,7 @@ describe('aggregate()', () => {
     expect(indexTs.functions[1].sampleCount).toBe(2);
   });
 
-  it('handles single package above threshold with otherCount 0', () => {
+  it('handles single package with otherCount 0', () => {
     const store = new SampleStore();
     store.record('solo', 'index.ts', 'run:1', 100_000);
 
@@ -224,19 +222,15 @@ describe('aggregate()', () => {
     expect(result.totalTimeUs).toBe(100_000);
   });
 
-  it('handles all packages below threshold -> packages empty, otherCount = N', () => {
+  it('includes all packages even when each is tiny — no threshold filtering', () => {
     const store = new SampleStore();
-    // Many tiny packages each with 100us. Each is 100/500 = 20% individually,
-    // but let's make them tiny enough: 5 packages of 100us each = 500 total, threshold=25
-    // Need: each < 5%. So 100 packages of 1us each? Total=100, threshold=5. Each=1%.
     for (let i = 0; i < 100; i++) {
       store.record(`pkg-${i}`, 'index.ts', 'fn:1', 1);
     }
-    // total = 100, threshold = 5. Each package = 1us = 1% < 5%
     const result = aggregate(store, 'none-match');
 
-    expect(result.packages).toEqual([]);
-    expect(result.otherCount).toBe(100);
+    expect(result.packages.length).toBe(100);
+    expect(result.otherCount).toBe(0);
     expect(result.totalTimeUs).toBe(100);
   });
 

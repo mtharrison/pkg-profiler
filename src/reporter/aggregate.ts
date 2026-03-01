@@ -1,10 +1,9 @@
 /**
- * Transform raw SampleStore data into a sorted, thresholded ReportData structure.
+ * Transform raw SampleStore data into a sorted ReportData structure.
  *
- * Pure function: reads nested Maps from SampleStore, applies a 5% threshold
- * at every level (package, file, function) relative to the total profiled time,
- * aggregates below-threshold entries into an "other" count, and sorts by
- * timeUs descending at each level.
+ * Pure function: reads nested Maps from SampleStore, computes percentages,
+ * and sorts by timeUs descending at each level. No threshold filtering —
+ * all entries are included so the HTML report can apply thresholds client-side.
  */
 
 import type { SampleStore } from '../sample-store.js';
@@ -15,27 +14,35 @@ import type {
   FunctionEntry,
 } from '../types.js';
 
-const THRESHOLD_PCT = 0.05;
+/**
+ * Sum all microseconds in a SampleStore.
+ */
+function sumStore(store: SampleStore): number {
+  let total = 0;
+  for (const fileMap of store.packages.values()) {
+    for (const funcMap of fileMap.values()) {
+      for (const us of funcMap.values()) {
+        total += us;
+      }
+    }
+  }
+  return total;
+}
 
 /**
  * Aggregate SampleStore data into a ReportData structure.
  *
  * @param store - SampleStore with accumulated microseconds and sample counts
  * @param projectName - Name of the first-party project (for isFirstParty flag)
- * @returns ReportData with packages sorted desc by time, thresholded at 5%
+ * @param asyncStore - Optional SampleStore with async wait time data
+ * @returns ReportData with all packages sorted desc by time, no threshold applied
  */
-export function aggregate(store: SampleStore, projectName: string): ReportData {
+export function aggregate(store: SampleStore, projectName: string, asyncStore?: SampleStore): ReportData {
   // 1. Calculate total user-attributed time
-  let totalTimeUs = 0;
-  for (const fileMap of store.packages.values()) {
-    for (const funcMap of fileMap.values()) {
-      for (const us of funcMap.values()) {
-        totalTimeUs += us;
-      }
-    }
-  }
+  const totalTimeUs = sumStore(store);
+  const totalAsyncTimeUs = asyncStore ? sumStore(asyncStore) : 0;
 
-  if (totalTimeUs === 0) {
+  if (totalTimeUs === 0 && totalAsyncTimeUs === 0) {
     return {
       timestamp: new Date().toLocaleString(),
       totalTimeUs: 0,
@@ -45,24 +52,27 @@ export function aggregate(store: SampleStore, projectName: string): ReportData {
     };
   }
 
-  const threshold = totalTimeUs * THRESHOLD_PCT;
+  // Collect all package names from both stores
+  const allPackageNames = new Set<string>();
+  for (const name of store.packages.keys()) allPackageNames.add(name);
+  if (asyncStore) {
+    for (const name of asyncStore.packages.keys()) allPackageNames.add(name);
+  }
+
   const packages: PackageEntry[] = [];
-  let topLevelOtherCount = 0;
 
   // 2. Process each package
-  for (const [packageName, fileMap] of store.packages) {
-    // Sum total time for this package
-    let packageTimeUs = 0;
-    for (const funcMap of fileMap.values()) {
-      for (const us of funcMap.values()) {
-        packageTimeUs += us;
-      }
-    }
+  for (const packageName of allPackageNames) {
+    const fileMap = store.packages.get(packageName);
 
-    // Apply threshold at package level
-    if (packageTimeUs < threshold) {
-      topLevelOtherCount++;
-      continue;
+    // Sum total CPU time for this package
+    let packageTimeUs = 0;
+    if (fileMap) {
+      for (const funcMap of fileMap.values()) {
+        for (const us of funcMap.values()) {
+          packageTimeUs += us;
+        }
+      }
     }
 
     // Sum total sample count for this package
@@ -76,21 +86,46 @@ export function aggregate(store: SampleStore, projectName: string): ReportData {
       }
     }
 
-    // 3. Process files within the package
-    const files: FileEntry[] = [];
-    let fileOtherCount = 0;
-
-    for (const [fileName, funcMap] of fileMap) {
-      // Sum time for this file
-      let fileTimeUs = 0;
-      for (const us of funcMap.values()) {
-        fileTimeUs += us;
+    // Async totals for this package
+    let packageAsyncTimeUs = 0;
+    let packageAsyncOpCount = 0;
+    const asyncFileMap = asyncStore?.packages.get(packageName);
+    const asyncCountFileMap = asyncStore?.sampleCountsByPackage.get(packageName);
+    if (asyncFileMap) {
+      for (const funcMap of asyncFileMap.values()) {
+        for (const us of funcMap.values()) {
+          packageAsyncTimeUs += us;
+        }
       }
+    }
+    if (asyncCountFileMap) {
+      for (const countFuncMap of asyncCountFileMap.values()) {
+        for (const count of countFuncMap.values()) {
+          packageAsyncOpCount += count;
+        }
+      }
+    }
 
-      // Apply threshold at file level (relative to total)
-      if (fileTimeUs < threshold) {
-        fileOtherCount++;
-        continue;
+    // 3. Collect all file names from both stores for this package
+    const allFileNames = new Set<string>();
+    if (fileMap) {
+      for (const name of fileMap.keys()) allFileNames.add(name);
+    }
+    if (asyncFileMap) {
+      for (const name of asyncFileMap.keys()) allFileNames.add(name);
+    }
+
+    const files: FileEntry[] = [];
+
+    for (const fileName of allFileNames) {
+      const funcMap = fileMap?.get(fileName);
+
+      // Sum CPU time for this file
+      let fileTimeUs = 0;
+      if (funcMap) {
+        for (const us of funcMap.values()) {
+          fileTimeUs += us;
+        }
       }
 
       // Sum sample count for this file
@@ -102,62 +137,112 @@ export function aggregate(store: SampleStore, projectName: string): ReportData {
         }
       }
 
-      // 4. Process functions within the file
-      const functions: FunctionEntry[] = [];
-      let funcOtherCount = 0;
-
-      for (const [funcName, funcTimeUs] of funcMap) {
-        // Apply threshold at function level (relative to total)
-        if (funcTimeUs < threshold) {
-          funcOtherCount++;
-          continue;
+      // Async totals for this file
+      let fileAsyncTimeUs = 0;
+      let fileAsyncOpCount = 0;
+      const asyncFuncMap = asyncFileMap?.get(fileName);
+      const asyncCountFuncMap = asyncCountFileMap?.get(fileName);
+      if (asyncFuncMap) {
+        for (const us of asyncFuncMap.values()) {
+          fileAsyncTimeUs += us;
         }
+      }
+      if (asyncCountFuncMap) {
+        for (const count of asyncCountFuncMap.values()) {
+          fileAsyncOpCount += count;
+        }
+      }
 
+      // 4. Collect all function names from both stores for this file
+      const allFuncNames = new Set<string>();
+      if (funcMap) {
+        for (const name of funcMap.keys()) allFuncNames.add(name);
+      }
+      if (asyncFuncMap) {
+        for (const name of asyncFuncMap.keys()) allFuncNames.add(name);
+      }
+
+      const functions: FunctionEntry[] = [];
+
+      for (const funcName of allFuncNames) {
+        const funcTimeUs = funcMap?.get(funcName) ?? 0;
         const funcSampleCount = countFuncMap?.get(funcName) ?? 0;
+        const funcAsyncTimeUs = asyncFuncMap?.get(funcName) ?? 0;
+        const funcAsyncOpCount = asyncCountFuncMap?.get(funcName) ?? 0;
 
-        functions.push({
+        const entry: FunctionEntry = {
           name: funcName,
           timeUs: funcTimeUs,
-          pct: (funcTimeUs / totalTimeUs) * 100,
+          pct: totalTimeUs > 0 ? (funcTimeUs / totalTimeUs) * 100 : 0,
           sampleCount: funcSampleCount,
-        });
+        };
+
+        if (totalAsyncTimeUs > 0) {
+          entry.asyncTimeUs = funcAsyncTimeUs;
+          entry.asyncPct = (funcAsyncTimeUs / totalAsyncTimeUs) * 100;
+          entry.asyncOpCount = funcAsyncOpCount;
+        }
+
+        functions.push(entry);
       }
 
       // Sort functions by timeUs descending
       functions.sort((a, b) => b.timeUs - a.timeUs);
 
-      files.push({
+      const fileEntry: FileEntry = {
         name: fileName,
         timeUs: fileTimeUs,
-        pct: (fileTimeUs / totalTimeUs) * 100,
+        pct: totalTimeUs > 0 ? (fileTimeUs / totalTimeUs) * 100 : 0,
         sampleCount: fileSampleCount,
         functions,
-        otherCount: funcOtherCount,
-      });
+        otherCount: 0,
+      };
+
+      if (totalAsyncTimeUs > 0) {
+        fileEntry.asyncTimeUs = fileAsyncTimeUs;
+        fileEntry.asyncPct = (fileAsyncTimeUs / totalAsyncTimeUs) * 100;
+        fileEntry.asyncOpCount = fileAsyncOpCount;
+      }
+
+      files.push(fileEntry);
     }
 
     // Sort files by timeUs descending
     files.sort((a, b) => b.timeUs - a.timeUs);
 
-    packages.push({
+    const pkgEntry: PackageEntry = {
       name: packageName,
       timeUs: packageTimeUs,
-      pct: (packageTimeUs / totalTimeUs) * 100,
+      pct: totalTimeUs > 0 ? (packageTimeUs / totalTimeUs) * 100 : 0,
       isFirstParty: packageName === projectName,
       sampleCount: packageSampleCount,
       files,
-      otherCount: fileOtherCount,
-    });
+      otherCount: 0,
+    };
+
+    if (totalAsyncTimeUs > 0) {
+      pkgEntry.asyncTimeUs = packageAsyncTimeUs;
+      pkgEntry.asyncPct = (packageAsyncTimeUs / totalAsyncTimeUs) * 100;
+      pkgEntry.asyncOpCount = packageAsyncOpCount;
+    }
+
+    packages.push(pkgEntry);
   }
 
   // Sort packages by timeUs descending
   packages.sort((a, b) => b.timeUs - a.timeUs);
 
-  return {
+  const result: ReportData = {
     timestamp: new Date().toLocaleString(),
     totalTimeUs,
     packages,
-    otherCount: topLevelOtherCount,
+    otherCount: 0,
     projectName,
   };
+
+  if (totalAsyncTimeUs > 0) {
+    result.totalAsyncTimeUs = totalAsyncTimeUs;
+  }
+
+  return result;
 }

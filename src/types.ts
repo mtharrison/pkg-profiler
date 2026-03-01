@@ -27,6 +27,9 @@ export interface ReportEntry {
   timeUs: number;       // accumulated microseconds
   pct: number;          // percentage of total (0-100)
   sampleCount: number;  // number of samples attributed
+  asyncTimeUs?: number;   // accumulated async wait microseconds
+  asyncPct?: number;      // percentage of total async time (0-100)
+  asyncOpCount?: number;  // number of async operations attributed
 }
 
 export interface FunctionEntry extends ReportEntry {}
@@ -48,6 +51,7 @@ export interface ReportData {
   packages: PackageEntry[];
   otherCount: number;
   projectName: string;
+  totalAsyncTimeUs?: number;
 }
 
 /**
@@ -56,6 +60,8 @@ export interface ReportData {
 export interface StartOptions {
   /** Sampling interval in microseconds. Default: 1000 */
   interval?: number;
+  /** Enable async I/O wait time tracking via async_hooks. Default: false */
+  trackAsync?: boolean;
 }
 
 /**

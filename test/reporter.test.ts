@@ -47,13 +47,13 @@ const mockData: ReportData = {
           functions: [
             { name: 'handle:201', timeUs: 440_000, pct: 35.5, sampleCount: 6 },
           ],
-          otherCount: 1,
+          otherCount: 0,
         },
       ],
       otherCount: 0,
     },
   ],
-  otherCount: 2,
+  otherCount: 0,
 };
 
 describe('renderHtml()', () => {
@@ -101,12 +101,6 @@ describe('renderHtml()', () => {
     expect(html).toContain('fp-pkg');
   });
 
-  it('includes "Other" row when otherCount > 0', () => {
-    const html = renderHtml(mockData);
-    expect(html).toContain('Other (2 items)');
-    expect(html).toContain('other-row');
-  });
-
   it('includes inline CSS (self-contained)', () => {
     const html = renderHtml(mockData);
     expect(html).toContain('<style>');
@@ -117,12 +111,6 @@ describe('renderHtml()', () => {
     const html = renderHtml(mockData);
     // 1_240_000us = 1240ms = 1.24s
     expect(html).toContain('1.24s');
-  });
-
-  it('renders tree "Other" rows for files and functions', () => {
-    const html = renderHtml(mockData);
-    // express/lib/router.js has otherCount: 1
-    expect(html).toContain('Other (1 items)');
   });
 
   it('escapes HTML special characters in package names', () => {
@@ -138,6 +126,55 @@ describe('renderHtml()', () => {
     const html = renderHtml(dataWithSpecialChars);
     expect(html).not.toContain('<script>alert("xss")</script>');
     expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('contains __REPORT_DATA__ JSON blob', () => {
+    const html = renderHtml(mockData);
+    expect(html).toContain('__REPORT_DATA__');
+  });
+
+  it('contains threshold-slider input', () => {
+    const html = renderHtml(mockData);
+    expect(html).toContain('id="threshold-slider"');
+    expect(html).toContain('id="threshold-value"');
+    expect(html).toContain('type="range"');
+  });
+
+  it('contains summary-container and tree-container wrapper divs', () => {
+    const html = renderHtml(mockData);
+    expect(html).toContain('id="summary-container"');
+    expect(html).toContain('id="tree-container"');
+  });
+
+  it('embeds parseable JSON that matches input data structure', () => {
+    const html = renderHtml(mockData);
+    // Extract the JSON from the script tag
+    const match = html.match(/var __REPORT_DATA__ = (.+?);<\/script>/s);
+    expect(match).not.toBeNull();
+    const json = match![1].replace(/\\u003c/g, '<');
+    const parsed = JSON.parse(json) as ReportData;
+    expect(parsed.totalTimeUs).toBe(mockData.totalTimeUs);
+    expect(parsed.projectName).toBe(mockData.projectName);
+    expect(parsed.packages.length).toBe(mockData.packages.length);
+    expect(parsed.packages[0].name).toBe('my-app');
+    expect(parsed.packages[1].name).toBe('express');
+  });
+
+  it('sanitizes < in JSON to prevent script injection', () => {
+    const dataWithScript: ReportData = {
+      ...mockData,
+      packages: [
+        {
+          ...mockData.packages[0],
+          name: '</script><script>alert(1)</script>',
+        },
+      ],
+    };
+    const html = renderHtml(dataWithScript);
+    // The JSON blob should not contain literal </script>
+    const scriptSection = html.slice(html.indexOf('__REPORT_DATA__'));
+    expect(scriptSection).not.toContain('</script><script>');
+    expect(scriptSection).toContain('\\u003c');
   });
 });
 
