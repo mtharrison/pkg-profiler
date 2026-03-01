@@ -52,7 +52,7 @@ describe("sampler", () => {
   });
 
   describe("SMPL-04: report() attributes samples to correct package", () => {
-    it("attributes burnCpu samples to where-you-at (first-party)", async () => {
+    it("attributes burnCpu samples to @mtharrison/pkg-profiler (first-party)", async () => {
       const recordSpy = vi.spyOn(_getStore(), "record");
 
       await track();
@@ -63,7 +63,7 @@ describe("sampler", () => {
       // recordSpy captured every store.record(pkg, file, fn, deltaUs) call made by processProfile()
       // Even though report() calls store.clear(), the spy retains call history
       const packageNames = recordSpy.mock.calls.map(([pkg]) => pkg);
-      expect(packageNames).toContain("where-you-at");
+      expect(packageNames).toContain("@mtharrison/pkg-profiler");
 
       // Verify record receives 4 arguments (pkg, file, fn, deltaUs)
       const firstCall = recordSpy.mock.calls[0]!;

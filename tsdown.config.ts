@@ -10,4 +10,5 @@ export default defineConfig({
   minify: false,
   platform: 'node',
   target: 'node20',
+  fixedExtension: false,
 })
