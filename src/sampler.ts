@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { Profiler } from "node:inspector";
-import { Session } from "node:inspector/promises";
+import { Session } from "node:inspector";
 import { join } from "node:path";
 import { AsyncTracker } from "./async-tracker.js";
 import { parseFrame } from "./frame-parser.js";
@@ -22,6 +22,39 @@ const asyncStore = new SampleStore();
 const resolver = new PackageResolver(process.cwd());
 let asyncTracker: AsyncTracker | null = null;
 
+/**
+ * Promisify session.post for the normal async API path.
+ */
+function postAsync(method: string, params?: object): Promise<any> {
+  return new Promise<any>((resolve, reject) => {
+    const cb: any = (err: Error | null, result?: any) => {
+      if (err) reject(err);
+      else resolve(result);
+    };
+    if (params !== undefined) {
+      session!.post(method, params, cb);
+    } else {
+      session!.post(method, cb);
+    }
+  });
+}
+
+/**
+ * Synchronous session.post — works because the V8 inspector executes
+ * callbacks synchronously for in-process sessions.
+ */
+function postSync(method: string): any {
+  let result: any;
+  let error: Error | null = null;
+  const cb: any = (err: Error | null, params?: any) => {
+    error = err;
+    result = params;
+  };
+  session!.post(method, cb);
+  if (error) throw error;
+  return result;
+}
+
 function readProjectName(cwd: string): string {
   try {
     const raw = readFileSync(join(cwd, "package.json"), "utf-8");
@@ -32,58 +65,28 @@ function readProjectName(cwd: string): string {
   }
 }
 
-/**
- * Start the V8 CPU profiler. If already profiling, this is a safe no-op.
- *
- * @param options - Optional configuration.
- * @param options.interval - Sampling interval in microseconds passed to V8 (defaults to 1000µs). Lower values = higher fidelity but more overhead.
- * @returns Resolves when the profiler is successfully started
- */
-export async function start(options?: StartOptions): Promise<void> {
-  if (profiling) return;
-
-  if (session === null) {
-    session = new Session();
-    session.connect();
-  }
-
-  await session.post("Profiler.enable");
-
-  if (options?.interval !== undefined) {
-    await session.post("Profiler.setSamplingInterval", {
-      interval: options.interval,
-    });
-  }
-
-  await session.post("Profiler.start");
-  profiling = true;
-
-  if (options?.trackAsync) {
-    asyncTracker = new AsyncTracker(resolver, asyncStore);
-    asyncTracker.enable();
-  }
+function buildEmptyProfile(): PkgProfile {
+  const projectName = readProjectName(process.cwd());
+  return new PkgProfile({
+    timestamp: new Date().toLocaleString(),
+    totalTimeUs: 0,
+    packages: [],
+    otherCount: 0,
+    projectName,
+  });
 }
 
 /**
- * Stop the profiler, process collected samples, and return a PkgProfile
- * containing the aggregated data. Resets the store afterward.
- *
- * @returns A PkgProfile with the profiling results, or a PkgProfile with empty data if no samples were collected.
+ * Shared logic for stopping the profiler and building a PkgProfile.
+ * Synchronous — safe to call from process `exit` handlers.
  */
-export async function stop(): Promise<PkgProfile> {
+function stopSync(): PkgProfile {
   if (!profiling || !session) {
-    const projectName = readProjectName(process.cwd());
-    return new PkgProfile({
-      timestamp: new Date().toLocaleString(),
-      totalTimeUs: 0,
-      packages: [],
-      otherCount: 0,
-      projectName,
-    });
+    return buildEmptyProfile();
   }
 
-  const { profile } = await session.post("Profiler.stop");
-  await session.post("Profiler.disable");
+  const { profile } = postSync("Profiler.stop") as Profiler.StopReturnType;
+  postSync("Profiler.disable");
   profiling = false;
 
   if (asyncTracker) {
@@ -106,12 +109,54 @@ export async function stop(): Promise<PkgProfile> {
 }
 
 /**
+ * Start the V8 CPU profiler. If already profiling, this is a safe no-op.
+ *
+ * @param options - Optional configuration.
+ * @param options.interval - Sampling interval in microseconds passed to V8 (defaults to 1000µs). Lower values = higher fidelity but more overhead.
+ * @returns Resolves when the profiler is successfully started
+ */
+export async function start(options?: StartOptions): Promise<void> {
+  if (profiling) return;
+
+  if (session === null) {
+    session = new Session();
+    session.connect();
+  }
+
+  await postAsync("Profiler.enable");
+
+  if (options?.interval !== undefined) {
+    await postAsync("Profiler.setSamplingInterval", {
+      interval: options.interval,
+    });
+  }
+
+  await postAsync("Profiler.start");
+  profiling = true;
+
+  if (options?.trackAsync) {
+    asyncTracker = new AsyncTracker(resolver, asyncStore);
+    asyncTracker.enable();
+  }
+}
+
+/**
+ * Stop the profiler, process collected samples, and return a PkgProfile
+ * containing the aggregated data. Resets the store afterward.
+ *
+ * @returns A PkgProfile with the profiling results, or a PkgProfile with empty data if no samples were collected.
+ */
+export async function stop(): Promise<PkgProfile> {
+  return stopSync();
+}
+
+/**
  * Stop the profiler (if running) and reset all accumulated sample data.
  */
 export async function clear(): Promise<void> {
   if (profiling && session) {
-    await session.post("Profiler.stop");
-    await session.post("Profiler.disable");
+    postSync("Profiler.stop");
+    postSync("Profiler.disable");
     profiling = false;
   }
   store.clear();
@@ -150,16 +195,15 @@ export async function profile(
 
   let handled = false;
 
-  const handler = async (signal?: NodeJS.Signals) => {
+  const handler = (signal?: NodeJS.Signals) => {
     if (handled) return;
     handled = true;
 
     process.removeListener("SIGINT", onSignal);
     process.removeListener("SIGTERM", onSignal);
-    process.removeListener("beforeExit", onBeforeExit);
-    process.removeListener("exit", onBeforeExit);
+    process.removeListener("exit", onProcessExit);
 
-    const result = await stop();
+    const result = stopSync();
     onExit(result);
 
     if (signal) {
@@ -168,16 +212,15 @@ export async function profile(
   };
 
   const onSignal = (signal: NodeJS.Signals) => {
-    void handler(signal);
+    handler(signal);
   };
-  const onBeforeExit = () => {
-    void handler();
+  const onProcessExit = () => {
+    handler();
   };
 
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
-  process.once("beforeExit", onBeforeExit);
-  process.once("exit", onBeforeExit);
+  process.once("exit", onProcessExit);
 }
 
 /**
