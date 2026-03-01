@@ -103,13 +103,15 @@ function stopSync(): PkgProfile {
 
   processProfile(profile);
 
-  const projectName = readProjectName(process.cwd());
+  const cwd = process.cwd();
+  const projectName = readProjectName(cwd);
   const data = aggregate(
     store,
     projectName,
     asyncStore.packages.size > 0 ? asyncStore : undefined,
     globalAsyncTimeUs,
     wallTimeUs,
+    cwd,
   );
   store.clear();
   asyncStore.clear();

@@ -41,6 +41,7 @@ export interface FileEntry extends ReportEntry {
 
 export interface PackageEntry extends ReportEntry {
   isFirstParty: boolean;
+  depChain?: string[];
   files: FileEntry[];
   otherCount: number;
 }

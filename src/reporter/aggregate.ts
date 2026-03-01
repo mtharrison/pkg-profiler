@@ -13,6 +13,7 @@ import type {
   FileEntry,
   FunctionEntry,
 } from '../types.js';
+import { resolveDependencyChains } from '../dep-chain.js';
 
 /**
  * Sum all microseconds in a SampleStore.
@@ -37,7 +38,7 @@ function sumStore(store: SampleStore): number {
  * @param asyncStore - Optional SampleStore with async wait time data
  * @returns ReportData with all packages sorted desc by time, no threshold applied
  */
-export function aggregate(store: SampleStore, projectName: string, asyncStore?: SampleStore, globalAsyncTimeUs?: number, wallTimeUs?: number): ReportData {
+export function aggregate(store: SampleStore, projectName: string, asyncStore?: SampleStore, globalAsyncTimeUs?: number, wallTimeUs?: number, projectRoot?: string): ReportData {
   // 1. Calculate total user-attributed time
   const totalTimeUs = sumStore(store);
   // Per-entry percentages use the raw sum so they add up to 100%
@@ -230,6 +231,22 @@ export function aggregate(store: SampleStore, projectName: string, asyncStore?: 
     }
 
     packages.push(pkgEntry);
+  }
+
+  // Resolve dependency chains for non-first-party packages
+  if (projectRoot) {
+    const thirdPartyNames = new Set(
+      packages.filter(p => !p.isFirstParty).map(p => p.name),
+    );
+    if (thirdPartyNames.size > 0) {
+      const chains = resolveDependencyChains(projectRoot, thirdPartyNames);
+      for (const pkg of packages) {
+        const chain = chains.get(pkg.name);
+        if (chain && chain.length > 0) {
+          pkg.depChain = chain;
+        }
+      }
+    }
   }
 
   // Sort packages by timeUs descending

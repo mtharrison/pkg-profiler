@@ -140,6 +140,45 @@ describe('renderHtml()', () => {
     expect(html).toContain('__REPORT_DATA__');
   });
 
+  it('renders "via" annotation for transitive dependencies', () => {
+    const dataWithChain: ReportData = {
+      ...mockData,
+      packages: [
+        mockData.packages[0],
+        {
+          ...mockData.packages[1],
+          name: 'qs',
+          depChain: ['express'],
+        },
+      ],
+    };
+    const html = renderHtml(dataWithChain);
+    expect(html).toContain('class="dep-chain"');
+    expect(html).toContain('via express');
+  });
+
+  it('renders multi-hop "via" chain with separator', () => {
+    const dataWithChain: ReportData = {
+      ...mockData,
+      packages: [
+        mockData.packages[0],
+        {
+          ...mockData.packages[1],
+          name: 'qs',
+          depChain: ['express', 'body-parser'],
+        },
+      ],
+    };
+    const html = renderHtml(dataWithChain);
+    expect(html).toContain('via express &gt; body-parser');
+  });
+
+  it('does not render "via" annotation for direct dependencies', () => {
+    const html = renderHtml(mockData);
+    // The CSS class definition exists in <style>, but no actual "via X" content should appear
+    expect(html).not.toContain('via express');
+  });
+
   it('contains threshold-slider input', () => {
     const html = renderHtml(mockData);
     expect(html).toContain('id="threshold-slider"');

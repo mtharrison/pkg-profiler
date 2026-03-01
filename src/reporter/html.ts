@@ -9,6 +9,11 @@
 import type { ReportData, PackageEntry, FileEntry } from '../types.js';
 import { formatTime, formatPct, escapeHtml } from './format.js';
 
+function formatDepChain(depChain: string[] | undefined): string {
+  if (!depChain || depChain.length === 0) return '';
+  return `<span class="dep-chain">via ${depChain.map(n => escapeHtml(n)).join(' &gt; ')}</span>`;
+}
+
 function generateCss(): string {
   return `
     :root {
@@ -152,6 +157,7 @@ function generateCss(): string {
     }
 
     td.pkg-name { font-family: var(--font-mono); font-size: 0.85rem; }
+    .dep-chain { display: block; font-size: 0.7rem; color: var(--muted); font-family: var(--font-sans); }
     td.numeric { text-align: right; font-family: var(--font-mono); font-size: 0.85rem; }
     td.async-col { color: var(--bar-fill-async); }
 
@@ -381,6 +387,11 @@ function generateJs(): string {
       .replace(/'/g, '&#39;');
   }
 
+  function depChainHtml(depChain) {
+    if (!depChain || depChain.length === 0) return '';
+    return '<span class="dep-chain">via ' + depChain.map(function(n) { return escapeHtml(n); }).join(' &gt; ') + '</span>';
+  }
+
   var sortBy = 'cpu';
 
   function metricTime(entry) {
@@ -451,6 +462,7 @@ function generateJs(): string {
         pct: pkg.pct,
         isFirstParty: pkg.isFirstParty,
         sampleCount: pkg.sampleCount,
+        depChain: pkg.depChain,
         asyncTimeUs: pkg.asyncTimeUs,
         asyncPct: pkg.asyncPct,
         asyncOpCount: pkg.asyncOpCount,
@@ -472,7 +484,7 @@ function generateJs(): string {
       var barVal = isAsync ? (pkg.asyncTimeUs || 0) : pkg.timeUs;
       var pctVal = barTotal > 0 ? (barVal / barTotal) * 100 : 0;
       rows += '<tr class="' + cls + '">' +
-        '<td class="pkg-name">' + escapeHtml(pkg.name) + '</td>' +
+        '<td class="pkg-name">' + escapeHtml(pkg.name) + depChainHtml(pkg.depChain) + '</td>' +
         '<td class="numeric">' + escapeHtml(formatTime(pkg.timeUs)) + '</td>' +
         '<td class="bar-cell"><div class="bar-container">' +
           '<div class="bar-track"><div class="bar-fill" style="width:' + pctVal.toFixed(1) + '%"></div></div>' +
@@ -526,6 +538,7 @@ function generateJs(): string {
       html += '<details class="level-0' + fpCls + '"><summary>';
       html += '<span class="tree-label pkg">pkg</span>';
       html += '<span class="tree-name">' + escapeHtml(pkg.name) + '</span>';
+      html += depChainHtml(pkg.depChain);
       html += '<span class="tree-stats">' + escapeHtml(formatTime(pkgTime)) + ' &middot; ' + escapeHtml(formatPct(pkgTime, pctTotal)) + ' &middot; ' + pkg.sampleCount + ' samples</span>';
       html += asyncStats(pkg);
       html += '</summary>';
@@ -633,7 +646,7 @@ function renderSummaryTable(
     const pctVal = totalTimeUs > 0 ? (pkg.timeUs / totalTimeUs) * 100 : 0;
     rows += `
       <tr class="${cls}">
-        <td class="pkg-name">${escapeHtml(pkg.name)}</td>
+        <td class="pkg-name">${escapeHtml(pkg.name)}${formatDepChain(pkg.depChain)}</td>
         <td class="numeric">${escapeHtml(formatTime(pkg.timeUs))}</td>
         <td class="bar-cell">
           <div class="bar-container">
@@ -697,6 +710,7 @@ function renderTree(
     html += `<summary>`;
     html += `<span class="tree-label pkg">pkg</span>`;
     html += `<span class="tree-name">${escapeHtml(pkg.name)}</span>`;
+    html += formatDepChain(pkg.depChain);
     html += `<span class="tree-stats">${escapeHtml(formatTime(pkg.timeUs))} &middot; ${escapeHtml(formatPct(pkg.timeUs, totalTimeUs))} &middot; ${pkg.sampleCount} samples</span>`;
     if (hasAsync) html += formatAsyncStats(pkg);
     html += `</summary>`;
