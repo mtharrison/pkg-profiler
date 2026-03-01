@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" width="120" height="120" alt="where-you-at logo">
+  <img src="assets/logo-removebg-preview.png" width="120" height="120" alt="where-you-at logo">
 </p>
 
 <h1 align="center">@mtharrison/pkg-profiler</h1>
