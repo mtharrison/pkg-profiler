@@ -1,21 +1,55 @@
 {
-  "name": "where-you-at",
-  "version": "1.0.0",
-  "description": "Per-package wall-time profiling for Node.js applications",
+  "name": "@mtharrison/pkg-profiler",
+  "version": "0.0.0-semantically-released",
+  "description": "Zero-dependency sampling profiler that shows which npm packages consume your wall time",
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
+    "build": "tsdown",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "profiler",
+    "performance",
+    "sampling",
+    "node",
+    "packages",
+    "wall-time",
+    "cpu-profiler",
+    "dependencies",
+    "npm"
+  ],
+  "author": "Matt Harrison",
+  "license": "MIT",
   "devDependencies": {
     "@types/node": "^20",
+    "tsdown": "^0.21.0-beta.2",
     "typescript": "~5.7",
     "vitest": "^3"
   }
