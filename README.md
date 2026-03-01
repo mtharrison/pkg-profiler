@@ -4,11 +4,6 @@
 
 <h1 align="center">pkg-profiler</h1>
 
-<h3 align="center">See which packages own your wall time.</h3>
-<p align="center">
-  Zero-dependency sampling profiler that breaks down Node.js wall time consumed by CPU and IO bound operations by npm package.
-</p>
-
 <p align="center">
   <a href="https://www.npmjs.com/package/@mtharrison/pkg-profiler"><img src="https://img.shields.io/npm/v/@mtharrison/pkg-profiler" alt="npm version"></a>
   <img src="https://img.shields.io/badge/dependencies-0-brightgreen" alt="zero dependencies">
@@ -19,6 +14,11 @@
   <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2020" alt="Node 20"></a>
   <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2022" alt="Node 22"></a>
   <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2024" alt="Node 24"></a>
+</p>
+
+<h3 align="center">See which packages own your wall time.</h3>
+<p align="center">
+  Zero-dependency sampling profiler that breaks down Node.js wall time consumed by CPU and IO bound operations by npm package.
 </p>
 
 <h3 align="center"><a href="#installation">Installation</a> &nbsp;&middot;&nbsp; <a href="#quick-start">Quick Start</a> &nbsp;&middot;&nbsp; <a href="#api">API</a> &nbsp;&middot;&nbsp; <a href="#async-io-tracking">Async I/O Tracking</a> &nbsp;&middot;&nbsp; <a href="#how-it-works">How It Works</a></h3>
