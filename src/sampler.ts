@@ -17,6 +17,7 @@ import type {
 // Module-level state -- lazy initialization
 let session: Session | null = null;
 let profiling = false;
+let startHrtime: [number, number] | null = null;
 const store = new SampleStore();
 const asyncStore = new SampleStore();
 const resolver = new PackageResolver(process.cwd());
@@ -85,6 +86,10 @@ function stopSync(): PkgProfile {
     return buildEmptyProfile();
   }
 
+  const elapsed = startHrtime ? process.hrtime(startHrtime) : null;
+  const wallTimeUs = elapsed ? elapsed[0] * 1_000_000 + Math.round(elapsed[1] / 1000) : undefined;
+  startHrtime = null;
+
   const { profile } = postSync("Profiler.stop") as Profiler.StopReturnType;
   postSync("Profiler.disable");
   profiling = false;
@@ -104,6 +109,7 @@ function stopSync(): PkgProfile {
     projectName,
     asyncStore.packages.size > 0 ? asyncStore : undefined,
     globalAsyncTimeUs,
+    wallTimeUs,
   );
   store.clear();
   asyncStore.clear();
@@ -136,6 +142,7 @@ export async function start(options?: StartOptions): Promise<void> {
 
   await postAsync("Profiler.start");
   profiling = true;
+  startHrtime = process.hrtime();
 
   if (options?.trackAsync) {
     asyncTracker = new AsyncTracker(resolver, asyncStore);
@@ -162,6 +169,7 @@ export async function clear(): Promise<void> {
     postSync("Profiler.disable");
     profiling = false;
   }
+  startHrtime = null;
   store.clear();
   if (asyncTracker) {
     asyncTracker.disable();

@@ -295,9 +295,59 @@ function generateCss(): string {
     .other-item.indent-1 { padding-left: 2rem; }
     .other-item.indent-2 { padding-left: 3.25rem; }
 
+    /* Sort control */
+    .sort-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-left: 1.5rem;
+      font-size: 0.85rem;
+    }
+
+    .sort-control label {
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.8rem;
+    }
+
+    .sort-toggle {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .sort-toggle button {
+      font-family: var(--font-sans);
+      font-size: 0.8rem;
+      padding: 0.25rem 0.6rem;
+      border: none;
+      background: #fff;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .sort-toggle button + button {
+      border-left: 1px solid var(--border);
+    }
+
+    .sort-toggle button.active {
+      background: var(--bar-fill);
+      color: #fff;
+    }
+
+    .sort-toggle button.active-async {
+      background: var(--bar-fill-async);
+      color: #fff;
+    }
+
     @media (max-width: 600px) {
       body { padding: 1rem; }
       .bar-cell { width: 25%; }
+      .sort-control { margin-left: 0; margin-top: 0.5rem; }
     }
   `;
 }
@@ -331,14 +381,27 @@ function generateJs(): string {
       .replace(/'/g, '&#39;');
   }
 
+  var sortBy = 'cpu';
+
+  function metricTime(entry) {
+    return sortBy === 'async' ? (entry.asyncTimeUs || 0) : entry.timeUs;
+  }
+
+  function sortDesc(arr) {
+    return arr.slice().sort(function(a, b) { return metricTime(b) - metricTime(a); });
+  }
+
   function applyThreshold(data, pct) {
-    var threshold = data.totalTimeUs * (pct / 100);
+    var totalBase = sortBy === 'async' ? (data.totalAsyncTimeUs || 0) : data.totalTimeUs;
+    var threshold = totalBase * (pct / 100);
     var filtered = [];
     var otherCount = 0;
 
-    for (var i = 0; i < data.packages.length; i++) {
-      var pkg = data.packages[i];
-      if (pkg.timeUs < threshold) {
+    var pkgs = sortDesc(data.packages);
+
+    for (var i = 0; i < pkgs.length; i++) {
+      var pkg = pkgs[i];
+      if (metricTime(pkg) < threshold) {
         otherCount++;
         continue;
       }
@@ -346,9 +409,11 @@ function generateJs(): string {
       var files = [];
       var fileOtherCount = 0;
 
-      for (var j = 0; j < pkg.files.length; j++) {
-        var file = pkg.files[j];
-        if (file.timeUs < threshold) {
+      var sortedFiles = sortDesc(pkg.files);
+
+      for (var j = 0; j < sortedFiles.length; j++) {
+        var file = sortedFiles[j];
+        if (metricTime(file) < threshold) {
           fileOtherCount++;
           continue;
         }
@@ -356,9 +421,11 @@ function generateJs(): string {
         var functions = [];
         var funcOtherCount = 0;
 
-        for (var k = 0; k < file.functions.length; k++) {
-          var fn = file.functions[k];
-          if (fn.timeUs < threshold) {
+        var sortedFns = sortDesc(file.functions);
+
+        for (var k = 0; k < sortedFns.length; k++) {
+          var fn = sortedFns[k];
+          if (metricTime(fn) < threshold) {
             funcOtherCount++;
             continue;
           }
@@ -395,18 +462,21 @@ function generateJs(): string {
     return { packages: filtered, otherCount: otherCount };
   }
 
-  function renderTable(packages, otherCount, totalTimeUs) {
+  function renderTable(packages, otherCount, totalTimeUs, totalAsyncTimeUs) {
     var rows = '';
+    var isAsync = sortBy === 'async';
+    var barTotal = isAsync ? (totalAsyncTimeUs || 0) : totalTimeUs;
     for (var i = 0; i < packages.length; i++) {
       var pkg = packages[i];
       var cls = pkg.isFirstParty ? 'first-party' : 'dependency';
-      var pctVal = totalTimeUs > 0 ? (pkg.timeUs / totalTimeUs) * 100 : 0;
+      var barVal = isAsync ? (pkg.asyncTimeUs || 0) : pkg.timeUs;
+      var pctVal = barTotal > 0 ? (barVal / barTotal) * 100 : 0;
       rows += '<tr class="' + cls + '">' +
         '<td class="pkg-name">' + escapeHtml(pkg.name) + '</td>' +
         '<td class="numeric">' + escapeHtml(formatTime(pkg.timeUs)) + '</td>' +
         '<td class="bar-cell"><div class="bar-container">' +
           '<div class="bar-track"><div class="bar-fill" style="width:' + pctVal.toFixed(1) + '%"></div></div>' +
-          '<span class="bar-pct">' + escapeHtml(formatPct(pkg.timeUs, totalTimeUs)) + '</span>' +
+          '<span class="bar-pct">' + escapeHtml(formatPct(barVal, barTotal)) + '</span>' +
         '</div></td>' +
         '<td class="numeric">' + pkg.sampleCount + '</td>';
       if (HAS_ASYNC) {
@@ -428,9 +498,9 @@ function generateJs(): string {
       rows += '</tr>';
     }
 
-    var headers = '<th>Package</th><th>Wall Time</th><th>% of Total</th><th>Samples</th>';
+    var headers = '<th>Package</th><th>CPU Time</th><th>% of Total</th><th>Samples</th>';
     if (HAS_ASYNC) {
-      headers += '<th>Async Wait</th><th>Async Ops</th>';
+      headers += '<th>Async I/O Wait</th><th>Async Ops</th>';
     }
 
     return '<table><thead><tr>' + headers + '</tr></thead><tbody>' + rows + '</tbody></table>';
@@ -444,34 +514,39 @@ function generateJs(): string {
     return ' <span class="tree-async">| ' + escapeHtml(formatTime(at)) + ' async &middot; ' + ac + ' ops</span>';
   }
 
-  function renderTree(packages, otherCount, totalTimeUs) {
+  function renderTree(packages, otherCount, totalTimeUs, totalAsyncTimeUs) {
     var html = '<div class="tree">';
+    var isAsync = sortBy === 'async';
+    var pctTotal = isAsync ? (totalAsyncTimeUs || 0) : totalTimeUs;
 
     for (var i = 0; i < packages.length; i++) {
       var pkg = packages[i];
       var fpCls = pkg.isFirstParty ? ' fp-pkg' : '';
+      var pkgTime = isAsync ? (pkg.asyncTimeUs || 0) : pkg.timeUs;
       html += '<details class="level-0' + fpCls + '"><summary>';
       html += '<span class="tree-label pkg">pkg</span>';
       html += '<span class="tree-name">' + escapeHtml(pkg.name) + '</span>';
-      html += '<span class="tree-stats">' + escapeHtml(formatTime(pkg.timeUs)) + ' &middot; ' + escapeHtml(formatPct(pkg.timeUs, totalTimeUs)) + ' &middot; ' + pkg.sampleCount + ' samples</span>';
+      html += '<span class="tree-stats">' + escapeHtml(formatTime(pkgTime)) + ' &middot; ' + escapeHtml(formatPct(pkgTime, pctTotal)) + ' &middot; ' + pkg.sampleCount + ' samples</span>';
       html += asyncStats(pkg);
       html += '</summary>';
 
       for (var j = 0; j < pkg.files.length; j++) {
         var file = pkg.files[j];
+        var fileTime = isAsync ? (file.asyncTimeUs || 0) : file.timeUs;
         html += '<details class="level-1"><summary>';
         html += '<span class="tree-label file">file</span>';
         html += '<span class="tree-name">' + escapeHtml(file.name) + '</span>';
-        html += '<span class="tree-stats">' + escapeHtml(formatTime(file.timeUs)) + ' &middot; ' + escapeHtml(formatPct(file.timeUs, totalTimeUs)) + ' &middot; ' + file.sampleCount + ' samples</span>';
+        html += '<span class="tree-stats">' + escapeHtml(formatTime(fileTime)) + ' &middot; ' + escapeHtml(formatPct(fileTime, pctTotal)) + ' &middot; ' + file.sampleCount + ' samples</span>';
         html += asyncStats(file);
         html += '</summary>';
 
         for (var k = 0; k < file.functions.length; k++) {
           var fn = file.functions[k];
+          var fnTime = isAsync ? (fn.asyncTimeUs || 0) : fn.timeUs;
           html += '<div class="level-2">';
           html += '<span class="tree-label fn">fn</span> ';
           html += '<span class="tree-name">' + escapeHtml(fn.name) + '</span>';
-          html += ' <span class="tree-stats">' + escapeHtml(formatTime(fn.timeUs)) + ' &middot; ' + escapeHtml(formatPct(fn.timeUs, totalTimeUs)) + ' &middot; ' + fn.sampleCount + ' samples</span>';
+          html += ' <span class="tree-stats">' + escapeHtml(formatTime(fnTime)) + ' &middot; ' + escapeHtml(formatPct(fnTime, pctTotal)) + ' &middot; ' + fn.sampleCount + ' samples</span>';
           html += asyncStats(fn);
           html += '</div>';
         }
@@ -498,12 +573,26 @@ function generateJs(): string {
     return html;
   }
 
+  var currentThreshold = 5;
+
   function update(pct) {
+    currentThreshold = pct;
     var result = applyThreshold(DATA, pct);
     var summaryEl = document.getElementById('summary-container');
     var treeEl = document.getElementById('tree-container');
-    if (summaryEl) summaryEl.innerHTML = renderTable(result.packages, result.otherCount, DATA.totalTimeUs);
-    if (treeEl) treeEl.innerHTML = renderTree(result.packages, result.otherCount, DATA.totalTimeUs);
+    if (summaryEl) summaryEl.innerHTML = renderTable(result.packages, result.otherCount, DATA.totalTimeUs, DATA.totalAsyncTimeUs);
+    if (treeEl) treeEl.innerHTML = renderTree(result.packages, result.otherCount, DATA.totalTimeUs, DATA.totalAsyncTimeUs);
+  }
+
+  function updateSortButtons() {
+    var btns = document.querySelectorAll('.sort-toggle button');
+    for (var i = 0; i < btns.length; i++) {
+      var btn = btns[i];
+      btn.className = '';
+      if (btn.getAttribute('data-sort') === sortBy) {
+        btn.className = sortBy === 'async' ? 'active-async' : 'active';
+      }
+    }
   }
 
   document.addEventListener('DOMContentLoaded', function() {
@@ -515,6 +604,15 @@ function generateJs(): string {
         var val = parseFloat(slider.value);
         if (label) label.textContent = val.toFixed(1) + '%';
         update(val);
+      });
+    }
+
+    var sortBtns = document.querySelectorAll('.sort-toggle button');
+    for (var i = 0; i < sortBtns.length; i++) {
+      sortBtns[i].addEventListener('click', function() {
+        sortBy = this.getAttribute('data-sort') || 'cpu';
+        updateSortButtons();
+        update(currentThreshold);
       });
     }
   });
@@ -566,10 +664,10 @@ function renderSummaryTable(
       <thead>
         <tr>
           <th>Package</th>
-          <th>Wall Time</th>
+          <th>CPU Time</th>
           <th>% of Total</th>
           <th>Samples</th>${hasAsync ? `
-          <th>Async Wait</th>
+          <th>Async I/O Wait</th>
           <th>Async Ops</th>` : ''}
         </tr>
       </thead>
@@ -657,9 +755,14 @@ export function renderHtml(data: ReportData): string {
 
   const titleName = escapeHtml(data.projectName);
 
-  let metaLine = `Generated ${escapeHtml(data.timestamp)} &middot; Total wall time: ${totalFormatted}`;
+  const wallFormatted = data.wallTimeUs ? escapeHtml(formatTime(data.wallTimeUs)) : null;
+  let metaLine = `Generated ${escapeHtml(data.timestamp)}`;
+  if (wallFormatted) {
+    metaLine += ` &middot; Wall time: ${wallFormatted}`;
+  }
+  metaLine += ` &middot; CPU time: ${totalFormatted}`;
   if (hasAsync) {
-    metaLine += ` &middot; Total async wait: ${escapeHtml(formatTime(data.totalAsyncTimeUs!))}`;
+    metaLine += ` &middot; Async I/O wait: ${escapeHtml(formatTime(data.totalAsyncTimeUs!))}`;
   }
 
   // Sanitize JSON for safe embedding in <script> — replace < to prevent </script> injection
@@ -682,7 +785,14 @@ export function renderHtml(data: ReportData): string {
   <div class="threshold-control">
     <label>Threshold</label>
     <input type="range" id="threshold-slider" min="0" max="20" step="0.5" value="5">
-    <span id="threshold-value">5.0%</span>
+    <span id="threshold-value">5.0%</span>${hasAsync ? `
+    <span class="sort-control">
+      <label>Sort by</label>
+      <span class="sort-toggle">
+        <button data-sort="cpu" class="active">CPU Time</button>
+        <button data-sort="async">Async I/O Wait</button>
+      </span>
+    </span>` : ''}
   </div>
   <div id="summary-container">${summaryTable}</div>
 

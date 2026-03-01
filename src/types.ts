@@ -52,6 +52,7 @@ export interface ReportData {
   otherCount: number;
   projectName: string;
   totalAsyncTimeUs?: number;
+  wallTimeUs?: number;
 }
 
 /**

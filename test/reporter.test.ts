@@ -68,7 +68,7 @@ describe('renderHtml()', () => {
     const html = renderHtml(mockData);
     expect(html).toContain('<table');
     expect(html).toContain('<th>Package</th>');
-    expect(html).toContain('<th>Wall Time</th>');
+    expect(html).toContain('<th>CPU Time</th>');
   });
 
   it('contains an expandable tree with details/summary', () => {
@@ -107,10 +107,17 @@ describe('renderHtml()', () => {
     expect(html).toContain('--first-party-accent');
   });
 
-  it('includes total wall time in meta', () => {
+  it('includes CPU time in meta', () => {
     const html = renderHtml(mockData);
     // 1_240_000us = 1240ms = 1.24s
-    expect(html).toContain('1.24s');
+    expect(html).toContain('CPU time: 1.24s');
+  });
+
+  it('includes wall time in meta when wallTimeUs is set', () => {
+    const dataWithWall: ReportData = { ...mockData, wallTimeUs: 2_500_000 };
+    const html = renderHtml(dataWithWall);
+    expect(html).toContain('Wall time: 2.50s');
+    expect(html).toContain('CPU time: 1.24s');
   });
 
   it('escapes HTML special characters in package names', () => {
@@ -175,6 +182,48 @@ describe('renderHtml()', () => {
     const scriptSection = html.slice(html.indexOf('__REPORT_DATA__'));
     expect(scriptSection).not.toContain('</script><script>');
     expect(scriptSection).toContain('\\u003c');
+  });
+});
+
+describe('sort control', () => {
+  it('renders sort control when totalAsyncTimeUs is set', () => {
+    const asyncData: ReportData = {
+      ...mockData,
+      totalAsyncTimeUs: 500_000,
+      packages: mockData.packages.map(pkg => ({
+        ...pkg,
+        asyncTimeUs: 250_000,
+        asyncPct: 50,
+        asyncOpCount: 3,
+        files: pkg.files.map(f => ({
+          ...f,
+          asyncTimeUs: 250_000,
+          asyncPct: 50,
+          asyncOpCount: 3,
+          functions: f.functions.map(fn => ({
+            ...fn,
+            asyncTimeUs: 125_000,
+            asyncPct: 25,
+            asyncOpCount: 1,
+          })),
+        })),
+      })),
+    };
+    const html = renderHtml(asyncData);
+    expect(html).toContain('class="sort-control"');
+    expect(html).toContain('class="sort-toggle"');
+    expect(html).toContain('data-sort="cpu"');
+    expect(html).toContain('data-sort="async"');
+    expect(html).toContain('CPU Time');
+    expect(html).toContain('Async I/O Wait');
+  });
+
+  it('does NOT render sort control when no async data', () => {
+    const html = renderHtml(mockData);
+    expect(html).not.toContain('class="sort-control"');
+    expect(html).not.toContain('class="sort-toggle"');
+    expect(html).not.toContain('data-sort="cpu"');
+    expect(html).not.toContain('data-sort="async"');
   });
 });
 

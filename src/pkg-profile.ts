@@ -31,6 +31,8 @@ export class PkgProfile {
   readonly projectName: string;
   /** Total async wait time in microseconds (undefined when async tracking not enabled) */
   readonly totalAsyncTimeUs?: number;
+  /** Elapsed wall time in microseconds from start() to stop() */
+  readonly wallTimeUs?: number;
 
   /** @internal */
   constructor(data: ReportData) {
@@ -40,6 +42,7 @@ export class PkgProfile {
     this.otherCount = data.otherCount;
     this.projectName = data.projectName;
     this.totalAsyncTimeUs = data.totalAsyncTimeUs;
+    this.wallTimeUs = data.wallTimeUs;
   }
 
   /**
@@ -56,6 +59,7 @@ export class PkgProfile {
       otherCount: this.otherCount,
       projectName: this.projectName,
       totalAsyncTimeUs: this.totalAsyncTimeUs,
+      wallTimeUs: this.wallTimeUs,
     };
     const html = renderHtml(data);
 
