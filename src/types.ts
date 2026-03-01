@@ -49,3 +49,19 @@ export interface ReportData {
   otherCount: number;
   projectName: string;
 }
+
+/**
+ * Options for `start()`.
+ */
+export interface StartOptions {
+  /** Sampling interval in microseconds. Default: 1000 */
+  interval?: number;
+}
+
+/**
+ * Options for `profile()` when used in long-running/server mode with an exit callback.
+ */
+export interface ProfileCallbackOptions extends StartOptions {
+  /** Called with the PkgProfile when the process receives SIGINT/SIGTERM or beforeExit fires. */
+  onExit: (result: import('./pkg-profile.js').PkgProfile) => void;
+}

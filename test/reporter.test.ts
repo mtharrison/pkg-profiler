@@ -3,61 +3,60 @@ import { existsSync, readFileSync, unlinkSync, mkdtempSync, writeFileSync, rmdir
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { renderHtml } from '../src/reporter/html.js';
-import { generateReport } from '../src/reporter.js';
-import { SampleStore } from '../src/sample-store.js';
+import { PkgProfile } from '../src/pkg-profile.js';
 import type { ReportData } from '../src/types.js';
 
-describe('renderHtml()', () => {
-  const mockData: ReportData = {
-    timestamp: '2026-01-15, 10:30:00 AM',
-    totalTimeUs: 1_240_000,
-    projectName: 'my-app',
-    packages: [
-      {
-        name: 'my-app',
-        timeUs: 800_000,
-        pct: 64.5,
-        isFirstParty: true,
-        sampleCount: 12,
-        files: [
-          {
-            name: 'src/index.ts',
-            timeUs: 800_000,
-            pct: 64.5,
-            sampleCount: 12,
-            functions: [
-              { name: 'main:1', timeUs: 500_000, pct: 40.3, sampleCount: 8 },
-              { name: 'helper:10', timeUs: 300_000, pct: 24.2, sampleCount: 4 },
-            ],
-            otherCount: 0,
-          },
-        ],
-        otherCount: 0,
-      },
-      {
-        name: 'express',
-        timeUs: 440_000,
-        pct: 35.5,
-        isFirstParty: false,
-        sampleCount: 6,
-        files: [
-          {
-            name: 'lib/router.js',
-            timeUs: 440_000,
-            pct: 35.5,
-            sampleCount: 6,
-            functions: [
-              { name: 'handle:201', timeUs: 440_000, pct: 35.5, sampleCount: 6 },
-            ],
-            otherCount: 1,
-          },
-        ],
-        otherCount: 0,
-      },
-    ],
-    otherCount: 2,
-  };
+const mockData: ReportData = {
+  timestamp: '2026-01-15, 10:30:00 AM',
+  totalTimeUs: 1_240_000,
+  projectName: 'my-app',
+  packages: [
+    {
+      name: 'my-app',
+      timeUs: 800_000,
+      pct: 64.5,
+      isFirstParty: true,
+      sampleCount: 12,
+      files: [
+        {
+          name: 'src/index.ts',
+          timeUs: 800_000,
+          pct: 64.5,
+          sampleCount: 12,
+          functions: [
+            { name: 'main:1', timeUs: 500_000, pct: 40.3, sampleCount: 8 },
+            { name: 'helper:10', timeUs: 300_000, pct: 24.2, sampleCount: 4 },
+          ],
+          otherCount: 0,
+        },
+      ],
+      otherCount: 0,
+    },
+    {
+      name: 'express',
+      timeUs: 440_000,
+      pct: 35.5,
+      isFirstParty: false,
+      sampleCount: 6,
+      files: [
+        {
+          name: 'lib/router.js',
+          timeUs: 440_000,
+          pct: 35.5,
+          sampleCount: 6,
+          functions: [
+            { name: 'handle:201', timeUs: 440_000, pct: 35.5, sampleCount: 6 },
+          ],
+          otherCount: 1,
+        },
+      ],
+      otherCount: 0,
+    },
+  ],
+  otherCount: 2,
+};
 
+describe('renderHtml()', () => {
   it('produces a complete HTML document', () => {
     const html = renderHtml(mockData);
     expect(html).toContain('<!DOCTYPE html>');
@@ -142,18 +141,16 @@ describe('renderHtml()', () => {
   });
 });
 
-describe('generateReport()', () => {
+describe('PkgProfile.writeHtml()', () => {
   let tmpDir: string;
   const generatedFiles: string[] = [];
 
   afterEach(() => {
-    // Clean up generated HTML files
     for (const f of generatedFiles) {
       try { unlinkSync(f); } catch { /* ignore */ }
     }
     generatedFiles.length = 0;
 
-    // Clean up temp directory
     if (tmpDir) {
       try { rmdirSync(tmpDir, { recursive: true } as any); } catch { /* ignore */ }
     }
@@ -161,37 +158,36 @@ describe('generateReport()', () => {
     vi.restoreAllMocks();
   });
 
-  it('writes an HTML file to the specified cwd and returns its path', () => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'wya-test-'));
-    // Write a package.json so the project name is detected
-    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'test-project' }));
+  it('writes an HTML file to cwd and returns its absolute path', () => {
+    const profile = new PkgProfile(mockData);
 
-    const store = new SampleStore();
-    store.record('test-project', 'src/index.ts', 'main:1', 500_000);
-    store.record('express', 'lib/router.js', 'handle:1', 300_000);
-
-    const spy = vi.spyOn(console, 'log');
-
-    const filepath = generateReport(store, tmpDir);
+    const filepath = profile.writeHtml();
     generatedFiles.push(filepath);
 
     expect(typeof filepath).toBe('string');
     expect(filepath).toContain('where-you-at-');
     expect(filepath).toContain('.html');
     expect(existsSync(filepath)).toBe(true);
+  });
 
-    // Verify console output
-    expect(spy).toHaveBeenCalledWith(expect.stringContaining('Report written to'));
+  it('writes to a specified path', () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'wya-test-'));
+    const outPath = join(tmpDir, 'custom-report.html');
+
+    const profile = new PkgProfile(mockData);
+    const filepath = profile.writeHtml(outPath);
+    generatedFiles.push(filepath);
+
+    expect(existsSync(filepath)).toBe(true);
+    expect(filepath).toContain('custom-report.html');
   });
 
   it('generates valid HTML content in the file', () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'wya-test-'));
-    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'my-app' }));
+    const outPath = join(tmpDir, 'output.html');
 
-    const store = new SampleStore();
-    store.record('my-app', 'src/index.ts', 'main:1', 500_000);
-
-    const filepath = generateReport(store, tmpDir);
+    const profile = new PkgProfile(mockData);
+    const filepath = profile.writeHtml(outPath);
     generatedFiles.push(filepath);
 
     const content = readFileSync(filepath, 'utf-8');
@@ -201,28 +197,12 @@ describe('generateReport()', () => {
     expect(content).toContain('my-app');
   });
 
-  it('falls back to "app" when package.json is missing', () => {
+  it('marks first-party package based on projectName', () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'wya-test-'));
-    // No package.json in tmpDir
+    const outPath = join(tmpDir, 'output.html');
 
-    const store = new SampleStore();
-    store.record('some-pkg', 'index.ts', 'fn:1', 100_000);
-
-    const filepath = generateReport(store, tmpDir);
-    generatedFiles.push(filepath);
-
-    expect(existsSync(filepath)).toBe(true);
-  });
-
-  it('marks first-party package based on package.json name', () => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'wya-test-'));
-    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'my-app' }));
-
-    const store = new SampleStore();
-    store.record('my-app', 'src/index.ts', 'main:1', 500_000);
-    store.record('express', 'lib/router.js', 'handle:1', 300_000);
-
-    const filepath = generateReport(store, tmpDir);
+    const profile = new PkgProfile(mockData);
+    const filepath = profile.writeHtml(outPath);
     generatedFiles.push(filepath);
 
     const content = readFileSync(filepath, 'utf-8');

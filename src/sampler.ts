@@ -1,16 +1,29 @@
 import type { Profiler } from "node:inspector";
 import { Session } from "node:inspector/promises";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { parseFrame } from "./frame-parser.js";
 import { PackageResolver } from "./package-resolver.js";
-import { generateReport } from "./reporter.js";
+import { PkgProfile } from "./pkg-profile.js";
+import { aggregate } from "./reporter/aggregate.js";
 import { SampleStore } from "./sample-store.js";
-import type { RawCallFrame } from "./types.js";
+import type { RawCallFrame, StartOptions, ProfileCallbackOptions } from "./types.js";
 
 // Module-level state -- lazy initialization
 let session: Session | null = null;
 let profiling = false;
 const store = new SampleStore();
 const resolver = new PackageResolver(process.cwd());
+
+function readProjectName(cwd: string): string {
+  try {
+    const raw = readFileSync(join(cwd, 'package.json'), 'utf-8');
+    const pkg = JSON.parse(raw) as { name?: string };
+    return pkg.name ?? 'app';
+  } catch {
+    return 'app';
+  }
+}
 
 /**
  * Start the V8 CPU profiler. If already profiling, this is a safe no-op.
@@ -19,7 +32,7 @@ const resolver = new PackageResolver(process.cwd());
  * @param options.interval - Sampling interval in microseconds passed to V8 (defaults to 1000µs). Lower values = higher fidelity but more overhead.
  * @returns Resolves when the profiler is successfully started
  */
-export async function track(options?: { interval?: number }): Promise<void> {
+export async function start(options?: StartOptions): Promise<void> {
   if (profiling) return;
 
   if (session === null) {
@@ -40,6 +53,37 @@ export async function track(options?: { interval?: number }): Promise<void> {
 }
 
 /**
+ * Stop the profiler, process collected samples, and return a PkgProfile
+ * containing the aggregated data. Resets the store afterward.
+ *
+ * @returns A PkgProfile with the profiling results, or a PkgProfile with empty data if no samples were collected.
+ */
+export async function stop(): Promise<PkgProfile> {
+  if (!profiling || !session) {
+    const projectName = readProjectName(process.cwd());
+    return new PkgProfile({
+      timestamp: new Date().toLocaleString(),
+      totalTimeUs: 0,
+      packages: [],
+      otherCount: 0,
+      projectName,
+    });
+  }
+
+  const { profile } = await session.post("Profiler.stop");
+  await session.post("Profiler.disable");
+  profiling = false;
+
+  processProfile(profile);
+
+  const projectName = readProjectName(process.cwd());
+  const data = aggregate(store, projectName);
+  store.clear();
+
+  return new PkgProfile(data);
+}
+
+/**
  * Stop the profiler (if running) and reset all accumulated sample data.
  */
 export async function clear(): Promise<void> {
@@ -52,36 +96,53 @@ export async function clear(): Promise<void> {
 }
 
 /**
- * Stop the profiler, process collected samples through the data pipeline
- * (parseFrame -> PackageResolver -> SampleStore), generate an HTML report,
- * and return the file path. Resets the store after reporting (clean slate
- * for next cycle).
+ * High-level convenience for common profiling patterns.
  *
- * @returns The absolute path to the generated HTML file, or empty string
- * if no samples were collected.
+ * Overload 1: Profile a block of code — runs `fn`, stops the profiler, returns PkgProfile.
+ * Overload 2: Long-running mode — starts profiler, registers exit handlers, calls `onExit` on shutdown.
  */
-export async function report(): Promise<string> {
-  if (!profiling || !session) {
-    console.log("no samples collected");
-    return "";
+export async function profile(fn: () => void | Promise<void>): Promise<PkgProfile>;
+export async function profile(options: ProfileCallbackOptions): Promise<void>;
+export async function profile(
+  fnOrOptions: (() => void | Promise<void>) | ProfileCallbackOptions,
+): Promise<PkgProfile | void> {
+  if (typeof fnOrOptions === "function") {
+    await start();
+    try {
+      await fnOrOptions();
+    } finally {
+      return stop();
+    }
   }
 
-  const { profile } = await session.post("Profiler.stop");
-  await session.post("Profiler.disable");
-  profiling = false;
+  // Long-running / onExit mode
+  const { onExit, ...startOpts } = fnOrOptions;
+  await start(startOpts);
 
-  processProfile(profile);
+  let handled = false;
 
-  let filepath = "";
+  const handler = async (signal?: NodeJS.Signals) => {
+    if (handled) return;
+    handled = true;
 
-  if (store.packages.size > 0) {
-    filepath = generateReport(store);
-  } else {
-    console.log("no samples collected");
-  }
+    process.removeListener("SIGINT", onSignal);
+    process.removeListener("SIGTERM", onSignal);
+    process.removeListener("beforeExit", onBeforeExit);
 
-  store.clear();
-  return filepath;
+    const result = await stop();
+    onExit(result);
+
+    if (signal) {
+      process.kill(process.pid, signal);
+    }
+  };
+
+  const onSignal = (signal: NodeJS.Signals) => { void handler(signal); };
+  const onBeforeExit = () => { void handler(); };
+
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  process.once("beforeExit", onBeforeExit);
 }
 
 /**

@@ -22,11 +22,23 @@
 ## Quick Start
 
 ```typescript
-import { track, report } from '@mtharrison/pkg-profiler';
+import { start, stop } from '@mtharrison/pkg-profiler';
 
-await track();
+await start();
 // ... your code here ...
-const path = await report(); // writes an HTML report to cwd
+const result = await stop();
+result.writeHtml(); // writes an HTML report to cwd
+```
+
+Or use the convenience wrapper:
+
+```typescript
+import { profile } from '@mtharrison/pkg-profiler';
+
+const result = await profile(async () => {
+  await build();
+});
+result.writeHtml();
 ```
 
 ## What You Get
@@ -35,7 +47,7 @@ A self-contained HTML report that shows exactly which npm packages are eating yo
 
 ## API
 
-### `track(options?)`
+### `start(options?)`
 
 Start the V8 CPU sampling profiler. Safe no-op if already profiling.
 
@@ -43,13 +55,56 @@ Start the V8 CPU sampling profiler. Safe no-op if already profiling.
 |------------|----------|---------|------------------------------------|
 | `interval` | `number` | V8 default | Sampling interval in microseconds |
 
-### `report()`
+### `stop()`
 
-Stop profiling, generate an HTML report, write it to the current directory, and return the absolute file path. Resets all data afterward. Returns `""` if no samples were collected.
+Stop the profiler and return a `PkgProfile` containing the aggregated data. Resets the sample store afterward.
 
 ### `clear()`
 
-Stop profiling and discard all data without writing a report.
+Stop profiling and discard all data without generating a profile.
+
+### `profile(fn)`
+
+Profile a block of code. Starts the profiler, runs `fn`, stops the profiler, and returns a `PkgProfile`.
+
+```typescript
+const result = await profile(async () => {
+  await runBuild();
+  await runTests();
+});
+const path = result.writeHtml();
+```
+
+### `profile({ onExit })`
+
+Long-running mode for servers. Starts the profiler and registers shutdown handlers for SIGINT, SIGTERM, and `beforeExit`. When triggered, stops the profiler and calls `onExit` with the result.
+
+```typescript
+await profile({ onExit: (result) => result.writeHtml() });
+
+const app = createApp();
+app.listen(3000);
+// Ctrl+C → stop() called → onExit fires → writeHtml() → process exits
+```
+
+### `PkgProfile`
+
+Returned by `stop()` and `profile()`. Contains aggregated profiling data.
+
+| Property      | Type             | Description                                    |
+|---------------|------------------|------------------------------------------------|
+| `timestamp`   | `string`         | When the profile was captured                  |
+| `totalTimeUs` | `number`         | Total sampled wall time in microseconds        |
+| `packages`    | `PackageEntry[]` | Package breakdown sorted by time descending    |
+| `otherCount`  | `number`         | Number of packages below reporting threshold   |
+| `projectName` | `string`         | Project name from package.json                 |
+
+#### `writeHtml(path?)`
+
+Write a self-contained HTML report to disk. Returns the absolute path to the written file.
+
+- **Default**: writes to `./where-you-at-{timestamp}.html` in the current directory
+- **With path**: writes to the specified location
 
 ## How It Works
 
