@@ -10,6 +10,9 @@
  * - < 1s:  shows rounded milliseconds (e.g. "432ms")
  * - Sub-millisecond values round up to 1ms (never shows "0ms" for nonzero input)
  * - Zero returns "0ms"
+ *
+ * @param us - Time value in microseconds.
+ * @returns Human-readable time string.
  */
 export function formatTime(us: number): string {
   if (us === 0) return '0ms';
@@ -28,6 +31,10 @@ export function formatTime(us: number): string {
 /**
  * Convert microseconds to percentage of total with one decimal place.
  * Returns "0.0%" when totalUs is zero (avoids division by zero).
+ *
+ * @param us - Time value in microseconds.
+ * @param totalUs - Total time in microseconds (denominator).
+ * @returns Percentage string like `"12.3%"`.
  */
 export function formatPct(us: number, totalUs: number): string {
   if (totalUs === 0) return '0.0%';
@@ -38,6 +45,9 @@ export function formatPct(us: number, totalUs: number): string {
  * Escape HTML-special characters to prevent broken markup.
  * Handles: & < > " '
  * Ampersand is replaced first to avoid double-escaping.
+ *
+ * @param str - Raw string to escape.
+ * @returns HTML-safe string.
  */
 export function escapeHtml(str: string): string {
   return str

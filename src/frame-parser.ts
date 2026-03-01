@@ -8,6 +8,9 @@ import type { RawCallFrame, ParsedFrame } from './types.js';
  * It determines the frame kind (user code, internal, eval, wasm) and for user
  * frames converts the URL to a filesystem path and builds a human-readable
  * function identifier.
+ *
+ * @param frame - Raw call frame from the V8 CPU profiler.
+ * @returns A classified frame: `'user'` with file path and function id, or a non-user kind.
  */
 export function parseFrame(frame: RawCallFrame): ParsedFrame {
   const { url, functionName, lineNumber } = frame;

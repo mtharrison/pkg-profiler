@@ -344,6 +344,9 @@ function renderTree(
 
 /**
  * Render a complete self-contained HTML report from aggregated profiling data.
+ *
+ * @param data - Aggregated report data (packages, timing, project name).
+ * @returns A full HTML document string with inline CSS and no external dependencies.
  */
 export function renderHtml(data: ReportData): string {
   const summaryTable = renderSummaryTable(data.packages, data.otherCount, data.totalTimeUs);
