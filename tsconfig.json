@@ -16,7 +16,8 @@
     "isolatedModules": true,
     "isolatedDeclarations": true,
     "verbatimModuleSyntax": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": ["node"]
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist", "test"]
