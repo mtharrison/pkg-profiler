@@ -1,91 +1,63 @@
 <p align="center">
-  <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" fill="none">
-    <rect x="10" y="50" width="22" height="60" rx="4" fill="#6366f1" opacity="0.5"/>
-    <rect x="38" y="30" width="22" height="80" rx="4" fill="#6366f1" opacity="0.7"/>
-    <rect x="66" y="10" width="22" height="100" rx="4" fill="#6366f1" opacity="0.9"/>
-    <circle cx="21" cy="40" r="6" fill="#f59e0b"/>
-    <circle cx="49" cy="22" r="6" fill="#f59e0b"/>
-    <circle cx="77" cy="6" r="6" fill="#f59e0b"/>
-    <line x1="21" y1="40" x2="49" y2="22" stroke="#f59e0b" stroke-width="2"/>
-    <line x1="49" y1="22" x2="77" y2="6" stroke="#f59e0b" stroke-width="2"/>
-    <rect x="94" y="45" width="16" height="12" rx="2" fill="#6366f1"/>
-    <rect x="94" y="61" width="16" height="12" rx="2" fill="#6366f1" opacity="0.7"/>
-    <rect x="94" y="77" width="16" height="12" rx="2" fill="#6366f1" opacity="0.4"/>
-  </svg>
+  <img src="assets/logo.svg" width="120" height="120" alt="where-you-at logo">
 </p>
 
 <h1 align="center">@mtharrison/pkg-profiler</h1>
 
 <p align="center">
-  Zero-dependency sampling profiler that shows which npm packages consume your wall time.
+  <strong>Where's your wall time going? Find out in one call.</strong><br>
+  Zero-dependency sampling profiler that breaks down Node.js wall time by npm package.
 </p>
 
----
+<p align="center">
+  <a href="https://www.npmjs.com/package/@mtharrison/pkg-profiler"><img src="https://img.shields.io/npm/v/@mtharrison/pkg-profiler" alt="npm version"></a>
+  <img src="https://img.shields.io/node/v/@mtharrison/pkg-profiler" alt="node version">
+  <a href="LICENSE"><img src="https://img.shields.io/npm/l/@mtharrison/pkg-profiler" alt="license"></a>
+</p>
 
-## The Problem
+<p align="center">
+  <img src="assets/report-screenshot.png" width="660" alt="Example HTML report showing per-package wall time breakdown">
+</p>
 
-You have a slow Node.js process -- maybe a test suite that takes too long, a server that's sluggish to start, or a CLI tool that lags. You fire up a profiler and get a wall of individual function timings. You can see *what* is slow, but not *where* the time is going at the package level.
-
-What you really want to know is: **is the bottleneck in my code, or in a dependency?** And if it's a dependency, *which one*?
-
-`@mtharrison/pkg-profiler` gives you a per-package wall-time breakdown so you can instantly see whether you should be optimizing your own code or looking for a faster alternative to that one heavy dependency.
-
-## Installation
-
-```bash
-npm install @mtharrison/pkg-profiler
-```
-
-## Usage
+## Quick Start
 
 ```typescript
 import { track, report } from '@mtharrison/pkg-profiler';
 
 await track();
-
 // ... your code here ...
-
-const reportPath = await report();
-console.log(`Report written to ${reportPath}`);
+const path = await report(); // writes an HTML report to cwd
 ```
 
-The generated HTML report shows a breakdown of wall time by package, with expandable trees to drill down into individual files and functions.
+## What You Get
+
+A self-contained HTML report that shows exactly which npm packages are eating your wall time. The summary table gives you the top-level picture; expand the tree to drill into individual files and functions. First-party code is highlighted so you can instantly see whether the bottleneck is yours or a dependency's.
 
 ## API
 
 ### `track(options?)`
 
-Starts the V8 CPU sampling profiler. If already profiling, this is a safe no-op.
+Start the V8 CPU sampling profiler. Safe no-op if already profiling.
 
-**Options:**
-
-| Option     | Type     | Description                                    |
-|------------|----------|------------------------------------------------|
-| `interval` | `number` | Sampling interval in microseconds (optional)   |
-
-**Returns:** `Promise<void>`
+| Option     | Type     | Default | Description                        |
+|------------|----------|---------|------------------------------------|
+| `interval` | `number` | V8 default | Sampling interval in microseconds |
 
 ### `report()`
 
-Stops the profiler, processes collected samples, generates an HTML report, and returns the absolute path to the report file. Resets all accumulated data after reporting (clean slate for the next cycle).
-
-Returns an empty string if no samples were collected.
-
-**Returns:** `Promise<string>` -- absolute path to the generated HTML report
+Stop profiling, generate an HTML report, write it to the current directory, and return the absolute file path. Resets all data afterward. Returns `""` if no samples were collected.
 
 ### `clear()`
 
-Stops the profiler (if running) and resets all accumulated sample data without generating a report.
-
-**Returns:** `Promise<void>`
+Stop profiling and discard all data without writing a report.
 
 ## How It Works
 
-The library uses the V8 CPU profiler (via `node:inspector`) to periodically sample the call stack. Each sample's leaf frame (the function currently executing) is attributed the elapsed wall time. File paths are resolved to npm packages by detecting `node_modules` segments, giving you a per-package time breakdown without any code instrumentation.
+Uses the V8 CPU profiler (`node:inspector`) to sample the call stack at regular intervals. Each sample's leaf frame is attributed the elapsed wall time, then file paths are resolved to npm packages by walking up through `node_modules`. No code instrumentation required.
 
 ## Requirements
 
-- Node.js >= 20.0.0
+Node.js >= 20.0.0
 
 ## License
 

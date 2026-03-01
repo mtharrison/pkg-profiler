@@ -41,6 +41,7 @@ export function aggregate(store: SampleStore, projectName: string): ReportData {
       totalTimeUs: 0,
       packages: [],
       otherCount: 0,
+      projectName,
     };
   }
 
@@ -157,5 +158,6 @@ export function aggregate(store: SampleStore, projectName: string): ReportData {
     totalTimeUs,
     packages,
     otherCount: topLevelOtherCount,
+    projectName,
   };
 }

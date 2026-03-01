@@ -11,6 +11,7 @@ describe('renderHtml()', () => {
   const mockData: ReportData = {
     timestamp: '2026-01-15, 10:30:00 AM',
     totalTimeUs: 1_240_000,
+    projectName: 'my-app',
     packages: [
       {
         name: 'my-app',

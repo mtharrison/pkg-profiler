@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" fill="none">
+  <!-- Location pin body -->
+  <path d="M60 8C40.1 8 24 24.1 24 44c0 28 36 68 36 68s36-40 36-68C96 24.1 79.9 8 60 8z" fill="#3b6cf5" opacity="0.12"/>
+  <path d="M60 8C40.1 8 24 24.1 24 44c0 28 36 68 36 68s36-40 36-68C96 24.1 79.9 8 60 8z" stroke="#3b6cf5" stroke-width="3" fill="none"/>
+
+  <!-- Inner circle -->
+  <circle cx="60" cy="44" r="18" fill="#3b6cf5" opacity="0.15"/>
+
+  <!-- Package/box icon inside pin -->
+  <rect x="48" y="34" width="24" height="20" rx="2" stroke="#3b6cf5" stroke-width="2.5" fill="none"/>
+  <line x1="48" y1="42" x2="72" y2="42" stroke="#3b6cf5" stroke-width="2.5"/>
+  <line x1="60" y1="42" x2="60" y2="54" stroke="#3b6cf5" stroke-width="2.5"/>
+  <!-- Package flap -->
+  <polyline points="48,42 54,36 66,36 72,42" stroke="#3b6cf5" stroke-width="2.5" fill="none"/>
+
+  <!-- Small bar chart to the right of pin -->
+  <rect x="86" y="56" width="7" height="16" rx="1.5" fill="#3b6cf5" opacity="0.4"/>
+  <rect x="96" y="48" width="7" height="24" rx="1.5" fill="#3b6cf5" opacity="0.65"/>
+  <rect x="106" y="38" width="7" height="34" rx="1.5" fill="#3b6cf5" opacity="0.9"/>
+</svg>

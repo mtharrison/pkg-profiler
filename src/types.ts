@@ -47,4 +47,5 @@ export interface ReportData {
   totalTimeUs: number;
   packages: PackageEntry[];
   otherCount: number;
+  projectName: string;
 }

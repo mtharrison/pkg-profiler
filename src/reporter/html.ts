@@ -350,17 +350,19 @@ export function renderHtml(data: ReportData): string {
   const tree = renderTree(data.packages, data.otherCount, data.totalTimeUs);
   const totalFormatted = escapeHtml(formatTime(data.totalTimeUs));
 
+  const titleName = escapeHtml(data.projectName);
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>where-you-at report</title>
+  <title>${titleName} · where-you-at report</title>
   <style>${generateCss()}
   </style>
 </head>
 <body>
-  <h1>where-you-at</h1>
+  <h1>${titleName}</h1>
   <div class="meta">Generated ${escapeHtml(data.timestamp)} &middot; Total wall time: ${totalFormatted}</div>
 
   <h2>Summary</h2>
