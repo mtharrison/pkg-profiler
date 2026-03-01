@@ -1,10 +1,9 @@
-<p align="center">
-  <img src="assets/logo-removebg-preview.png" width="250"" alt="where-you-at logo">
-</p>
-
-<p align="center"><strong><span style="font-size:2em">@mtharrison/pkg-profiler</span></strong></p>
-
-<p align="center">
+<table width="100%"><tr>
+<td valign="middle">
+  <img src="assets/logo-removebg-preview.png" width="80" alt="pkg-profiler logo">
+  <h1>@mtharrison/pkg-profiler</h1>
+</td>
+<td align="right" valign="middle">
   <a href="https://www.npmjs.com/package/@mtharrison/pkg-profiler"><img src="https://img.shields.io/npm/v/@mtharrison/pkg-profiler" alt="npm version"></a>
   <img src="https://img.shields.io/badge/dependencies-0-brightgreen" alt="zero dependencies">
   <img src="https://img.shields.io/badge/TypeScript-strict-blue?logo=typescript&logoColor=white" alt="TypeScript strict">
@@ -14,7 +13,8 @@
   <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2020" alt="Node 20"></a>
   <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2022" alt="Node 22"></a>
   <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2024" alt="Node 24"></a>
-</p>
+</td>
+</tr></table>
 
 ---
 
