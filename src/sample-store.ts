@@ -17,9 +17,10 @@ export class SampleStore {
   /**
    * Record a sample for a user-code frame.
    * Accumulates deltaUs microseconds for the given (package, file, function) triple,
-   * and increments the parallel sample count by 1.
+   * and increments the parallel sample count.
+   * @param count — Number of samples to record (default 1). Used by async tracker to record multiple I/O ops from the same call site.
    */
-  record(packageName: string, relativePath: string, functionId: string, deltaUs: number): void {
+  record(packageName: string, relativePath: string, functionId: string, deltaUs: number, count: number = 1): void {
     // Accumulate microseconds
     let fileMap = this.data.get(packageName);
     if (fileMap === undefined) {
@@ -48,7 +49,7 @@ export class SampleStore {
       countFileMap.set(relativePath, countFuncMap);
     }
 
-    countFuncMap.set(functionId, (countFuncMap.get(functionId) ?? 0) + 1);
+    countFuncMap.set(functionId, (countFuncMap.get(functionId) ?? 0) + count);
   }
 
   /** Record an internal/filtered frame (empty URL, eval, wasm, idle, etc). */

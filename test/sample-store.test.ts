@@ -86,6 +86,30 @@ describe('SampleStore', () => {
       expect(sampleCount).toBe(3);
     });
 
+    it('accepts explicit count parameter for batch recording', () => {
+      store.record('express', 'lib/router.js', 'handle:201', 5000, 5);
+
+      const sampleCount = store.sampleCountsByPackage
+        .get('express')!
+        .get('lib/router.js')!
+        .get('handle:201');
+      expect(sampleCount).toBe(5);
+    });
+
+    it('accumulates explicit counts across multiple record calls', () => {
+      store.record('express', 'lib/router.js', 'handle:201', 2000, 3);
+      store.record('express', 'lib/router.js', 'handle:201', 3000, 7);
+
+      const sampleCount = store.sampleCountsByPackage
+        .get('express')!
+        .get('lib/router.js')!
+        .get('handle:201');
+      expect(sampleCount).toBe(10);
+
+      // Microseconds still accumulate normally
+      expect(store.packages.get('express')!.get('lib/router.js')!.get('handle:201')).toBe(5000);
+    });
+
     it('tracks sample counts per package independently', () => {
       store.record('express', 'lib/router.js', 'handle:201', 1000);
       store.record('lodash', 'index.js', 'map:10', 500);
