@@ -301,6 +301,64 @@ function generateCss(): string {
     .other-item.indent-1 { padding-left: 2rem; }
     .other-item.indent-2 { padding-left: 3.25rem; }
 
+    /* Function-level source toggle */
+    .level-2.has-source { padding: 0; font-size: 0.85rem; display: block; }
+    .level-2.has-source > summary {
+      padding: 0.45rem 0.75rem 0.45rem 3.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      list-style: none;
+    }
+    .level-2.has-source > summary::-webkit-details-marker { display: none; }
+    .level-2.has-source > summary::before {
+      content: '\\25B6';
+      font-size: 0.5rem;
+      color: var(--muted);
+      transition: transform 0.15s ease;
+      flex-shrink: 0;
+    }
+    .level-2.has-source[open] > summary::before {
+      transform: rotate(90deg);
+    }
+
+    /* Source snippet */
+    .source-snippet {
+      margin: 0;
+      padding: 0.5rem 0;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+    .source-snippet code { display: block; }
+    .src-line {
+      display: flex;
+      padding: 0 1rem 0 3.25rem;
+      white-space: pre;
+    }
+    .src-hot {
+      background: rgba(235, 160, 70, 0.15);
+      border-left: 3px solid #f5943b;
+      padding-left: calc(3.25rem - 3px);
+    }
+    .src-lineno {
+      display: inline-block;
+      width: 3.5em;
+      text-align: right;
+      color: #585b70;
+      padding-right: 1em;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    .tok-kw { color: #cba6f7; }
+    .tok-str { color: #a6e3a1; }
+    .tok-cmt { color: #6c7086; font-style: italic; }
+    .tok-num { color: #fab387; }
+
     /* Sort control */
     .sort-control {
       display: inline-flex;
@@ -556,12 +614,21 @@ function generateJs(): string {
         for (var k = 0; k < file.functions.length; k++) {
           var fn = file.functions[k];
           var fnTime = isAsync ? (fn.asyncTimeUs || 0) : fn.timeUs;
-          html += '<div class="level-2">';
-          html += '<span class="tree-label fn">fn</span> ';
-          html += '<span class="tree-name">' + escapeHtml(fn.name) + '</span>';
-          html += ' <span class="tree-stats">' + escapeHtml(formatTime(fnTime)) + ' &middot; ' + escapeHtml(formatPct(fnTime, pctTotal)) + ' &middot; ' + fn.sampleCount + ' samples</span>';
-          html += asyncStats(fn);
-          html += '</div>';
+          if (fn.sourceHtml) {
+            html += '<details class="level-2 has-source"><summary>';
+            html += '<span class="tree-label fn">fn</span> ';
+            html += '<span class="tree-name">' + escapeHtml(fn.name) + '</span>';
+            html += ' <span class="tree-stats">' + escapeHtml(formatTime(fnTime)) + ' &middot; ' + escapeHtml(formatPct(fnTime, pctTotal)) + ' &middot; ' + fn.sampleCount + ' samples</span>';
+            html += asyncStats(fn);
+            html += '</summary>' + fn.sourceHtml + '</details>';
+          } else {
+            html += '<div class="level-2">';
+            html += '<span class="tree-label fn">fn</span> ';
+            html += '<span class="tree-name">' + escapeHtml(fn.name) + '</span>';
+            html += ' <span class="tree-stats">' + escapeHtml(formatTime(fnTime)) + ' &middot; ' + escapeHtml(formatPct(fnTime, pctTotal)) + ' &middot; ' + fn.sampleCount + ' samples</span>';
+            html += asyncStats(fn);
+            html += '</div>';
+          }
         }
 
         if (file.otherCount > 0) {
@@ -725,12 +792,21 @@ function renderTree(
       html += `</summary>`;
 
       for (const fn of file.functions) {
-        html += `<div class="level-2">`;
-        html += `<span class="tree-label fn">fn</span> `;
-        html += `<span class="tree-name">${escapeHtml(fn.name)}</span>`;
-        html += ` <span class="tree-stats">${escapeHtml(formatTime(fn.timeUs))} &middot; ${escapeHtml(formatPct(fn.timeUs, totalTimeUs))} &middot; ${fn.sampleCount} samples</span>`;
-        if (hasAsync) html += formatAsyncStats(fn);
-        html += `</div>`;
+        if (fn.sourceHtml) {
+          html += `<details class="level-2 has-source"><summary>`;
+          html += `<span class="tree-label fn">fn</span> `;
+          html += `<span class="tree-name">${escapeHtml(fn.name)}</span>`;
+          html += ` <span class="tree-stats">${escapeHtml(formatTime(fn.timeUs))} &middot; ${escapeHtml(formatPct(fn.timeUs, totalTimeUs))} &middot; ${fn.sampleCount} samples</span>`;
+          if (hasAsync) html += formatAsyncStats(fn);
+          html += `</summary>${fn.sourceHtml}</details>`;
+        } else {
+          html += `<div class="level-2">`;
+          html += `<span class="tree-label fn">fn</span> `;
+          html += `<span class="tree-name">${escapeHtml(fn.name)}</span>`;
+          html += ` <span class="tree-stats">${escapeHtml(formatTime(fn.timeUs))} &middot; ${escapeHtml(formatPct(fn.timeUs, totalTimeUs))} &middot; ${fn.sampleCount} samples</span>`;
+          if (hasAsync) html += formatAsyncStats(fn);
+          html += `</div>`;
+        }
       }
 
       if (file.otherCount > 0) {

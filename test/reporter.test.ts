@@ -224,6 +224,85 @@ describe('renderHtml()', () => {
   });
 });
 
+describe('source code toggle', () => {
+  it('renders <details> with has-source class when sourceHtml is set', () => {
+    const dataWithSource: ReportData = {
+      ...mockData,
+      packages: [
+        {
+          ...mockData.packages[0],
+          files: [
+            {
+              ...mockData.packages[0].files[0],
+              functions: [
+                {
+                  ...mockData.packages[0].files[0].functions[0],
+                  sourceHtml: '<pre class="source-snippet"><code>highlighted code</code></pre>',
+                },
+                mockData.packages[0].files[0].functions[1],
+              ],
+            },
+          ],
+        },
+        mockData.packages[1],
+      ],
+    };
+    const html = renderHtml(dataWithSource);
+    expect(html).toContain('<details class="level-2 has-source">');
+    expect(html).toContain('<pre class="source-snippet">');
+  });
+
+  it('renders <div class="level-2"> when sourceHtml is not set', () => {
+    const html = renderHtml(mockData);
+    expect(html).toContain('<div class="level-2">');
+    // The server-rendered tree (between tree-container and the first <script>) should not contain has-source
+    const treeStart = html.indexOf('id="tree-container"');
+    const treeEnd = html.indexOf('<script>', treeStart);
+    const treeSection = html.slice(treeStart, treeEnd);
+    expect(treeSection).not.toContain('has-source');
+  });
+
+  it('includes source snippet CSS styles', () => {
+    const html = renderHtml(mockData);
+    expect(html).toContain('.source-snippet');
+    expect(html).toContain('.src-line');
+    expect(html).toContain('.src-hot');
+    expect(html).toContain('.src-lineno');
+    expect(html).toContain('.tok-kw');
+    expect(html).toContain('.tok-str');
+    expect(html).toContain('.tok-cmt');
+    expect(html).toContain('.tok-num');
+  });
+
+  it('embeds sourceHtml in JSON data blob for client-side rendering', () => {
+    const dataWithSource: ReportData = {
+      ...mockData,
+      packages: [
+        {
+          ...mockData.packages[0],
+          files: [
+            {
+              ...mockData.packages[0].files[0],
+              functions: [
+                {
+                  ...mockData.packages[0].files[0].functions[0],
+                  sourceHtml: '<pre class="source-snippet"><code>test</code></pre>',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const html = renderHtml(dataWithSource);
+    const match = html.match(/var __REPORT_DATA__ = (.+?);<\/script>/s);
+    expect(match).not.toBeNull();
+    const json = match![1].replace(/\\u003c/g, '<');
+    const parsed = JSON.parse(json) as ReportData;
+    expect(parsed.packages[0].files[0].functions[0].sourceHtml).toContain('source-snippet');
+  });
+});
+
 describe('sort control', () => {
   it('renders sort control when totalAsyncTimeUs is set', () => {
     const asyncData: ReportData = {

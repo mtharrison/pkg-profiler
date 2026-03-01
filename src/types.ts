@@ -32,7 +32,9 @@ export interface ReportEntry {
   asyncOpCount?: number;  // number of async operations attributed
 }
 
-export interface FunctionEntry extends ReportEntry {}
+export interface FunctionEntry extends ReportEntry {
+  sourceHtml?: string;
+}
 
 export interface FileEntry extends ReportEntry {
   functions: FunctionEntry[];
@@ -54,6 +56,7 @@ export interface ReportData {
   projectName: string;
   totalAsyncTimeUs?: number;
   wallTimeUs?: number;
+  projectRoot?: string;
 }
 
 /**

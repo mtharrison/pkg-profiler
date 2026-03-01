@@ -9,6 +9,7 @@ import { writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { PackageEntry, ReportData } from './types.js';
 import { renderHtml } from './reporter/html.js';
+import { readSourceSnippets, snippetKey } from './reporter/source-reader.js';
 
 function generateFilename(timestamp: string): string {
   const now = new Date();
@@ -33,6 +34,8 @@ export class PkgProfile {
   readonly totalAsyncTimeUs?: number;
   /** Elapsed wall time in microseconds from start() to stop() */
   readonly wallTimeUs?: number;
+  /** @internal Project root for source code reading */
+  private readonly projectRoot?: string;
 
   /** @internal */
   constructor(data: ReportData) {
@@ -43,6 +46,7 @@ export class PkgProfile {
     this.projectName = data.projectName;
     this.totalAsyncTimeUs = data.totalAsyncTimeUs;
     this.wallTimeUs = data.wallTimeUs;
+    this.projectRoot = data.projectRoot;
   }
 
   /**
@@ -61,6 +65,20 @@ export class PkgProfile {
       totalAsyncTimeUs: this.totalAsyncTimeUs,
       wallTimeUs: this.wallTimeUs,
     };
+
+    if (this.projectRoot) {
+      const snippets = readSourceSnippets(this.packages, this.projectRoot);
+      for (const pkg of data.packages) {
+        for (const file of pkg.files) {
+          for (const fn of file.functions) {
+            const key = snippetKey(pkg.name, file.name, fn.name);
+            const html = snippets.get(key);
+            if (html) fn.sourceHtml = html;
+          }
+        }
+      }
+    }
+
     const html = renderHtml(data);
 
     let filepath: string;

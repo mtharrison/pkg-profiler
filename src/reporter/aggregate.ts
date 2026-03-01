@@ -268,5 +268,9 @@ export function aggregate(store: SampleStore, projectName: string, asyncStore?: 
     result.wallTimeUs = wallTimeUs;
   }
 
+  if (projectRoot) {
+    result.projectRoot = projectRoot;
+  }
+
   return result;
 }
