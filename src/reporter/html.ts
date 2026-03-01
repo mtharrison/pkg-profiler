@@ -189,6 +189,21 @@ function generateCss(): string {
       flex: 1;
     }
 
+    .tree-label {
+      font-family: var(--font-sans);
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .tree-label.pkg { background: #e8eaed; color: #555; }
+    .tree-label.file { background: #e8f0fe; color: #3b6cf5; }
+    .tree-label.fn { background: #f0f0f0; color: #777; }
+
     .tree-stats {
       font-family: var(--font-mono);
       font-size: 0.8rem;
@@ -199,7 +214,7 @@ function generateCss(): string {
     /* Level indentation */
     .level-0 > summary { padding-left: 0.75rem; }
     .level-1 > summary { padding-left: 2rem; }
-    .level-2 { padding: 0.45rem 0.75rem 0.45rem 3.25rem; font-size: 0.85rem; }
+    .level-2 { padding: 0.45rem 0.75rem 0.45rem 3.25rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; }
 
     /* First-party package highlight */
     .fp-pkg > summary {
@@ -284,6 +299,7 @@ function renderTree(
     const fpCls = pkg.isFirstParty ? ' fp-pkg' : '';
     html += `<details class="level-0${fpCls}">`;
     html += `<summary>`;
+    html += `<span class="tree-label pkg">pkg</span>`;
     html += `<span class="tree-name">${escapeHtml(pkg.name)}</span>`;
     html += `<span class="tree-stats">${escapeHtml(formatTime(pkg.timeUs))} &middot; ${escapeHtml(formatPct(pkg.timeUs, totalTimeUs))} &middot; ${pkg.sampleCount} samples</span>`;
     html += `</summary>`;
@@ -291,12 +307,14 @@ function renderTree(
     for (const file of pkg.files) {
       html += `<details class="level-1">`;
       html += `<summary>`;
+      html += `<span class="tree-label file">file</span>`;
       html += `<span class="tree-name">${escapeHtml(file.name)}</span>`;
       html += `<span class="tree-stats">${escapeHtml(formatTime(file.timeUs))} &middot; ${escapeHtml(formatPct(file.timeUs, totalTimeUs))} &middot; ${file.sampleCount} samples</span>`;
       html += `</summary>`;
 
       for (const fn of file.functions) {
         html += `<div class="level-2">`;
+        html += `<span class="tree-label fn">fn</span> `;
         html += `<span class="tree-name">${escapeHtml(fn.name)}</span>`;
         html += ` <span class="tree-stats">${escapeHtml(formatTime(fn.timeUs))} &middot; ${escapeHtml(formatPct(fn.timeUs, totalTimeUs))} &middot; ${fn.sampleCount} samples</span>`;
         html += `</div>`;
