@@ -2,7 +2,7 @@
   <img src="assets/logo-removebg-preview.png" width="180" height="180" alt="where-you-at logo">
 </p>
 
-<div align="center"><h1>@mtharrison/pkg-profiler</h1></div>
+<p align="center"><strong><span style="font-size:2em">@mtharrison/pkg-profiler</span></strong></p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@mtharrison/pkg-profiler"><img src="https://img.shields.io/npm/v/@mtharrison/pkg-profiler" alt="npm version"></a>
@@ -18,7 +18,7 @@
 
 ---
 
-<h3 align="center">See which packages own your wall time.</h3>
+<h3 align="center" style="font-size: 1.5em">See which packages own your wall time.</h3>
 <p align="center">
   Zero-dependency sampling profiler that breaks down Node.js wall time consumed by CPU and IO bound operations by npm package.
 </p>
@@ -26,7 +26,7 @@
 <h3 align="center"><a href="#installation">Installation</a> &nbsp;&middot;&nbsp; <a href="#quick-start">Quick Start</a> &nbsp;&middot;&nbsp; <a href="#api">API</a> &nbsp;&middot;&nbsp; <a href="#async-io-tracking">Async I/O Tracking</a> &nbsp;&middot;&nbsp; <a href="#how-it-works">How It Works</a></h3>
 
 <p align="center">
-  <img src="assets/report-screenshot.png" width="660" alt="Example HTML report showing per-package wall time breakdown">
+  <img src="assets/report-screenshot.png" width="750" alt="Example HTML report showing per-package wall time breakdown">
 </p>
 
 ## Installation
