@@ -22,6 +22,7 @@ Zero-dependency V8 sampling profiler that attributes wall time to npm packages. 
 4. **Data Accumulation** (`sample-store.ts`) — Nested `Map<pkg, Map<file, Map<fn, microseconds>>>` with a parallel map for sample counts.
 5. **Aggregation** (`reporter/aggregate.ts`) — Pure function transforming `SampleStore` → `ReportData`. Applies 5% threshold at package/file/function levels, sorts by time descending.
 6. **HTML Rendering** (`reporter/html.ts`, `reporter/format.ts`) — Self-contained HTML with inline CSS. Summary table + expandable `<details>` tree.
+7. **Async I/O Tracking** (`async-tracker.ts`) — Opt-in (`trackAsync: true`) `async_hooks`-based tracker. Measures wait time between I/O initiation and callback, attributes to packages via stack trace parsing. Uses a separate `SampleStore` from the CPU sampler.
 
 `PkgProfile` (`pkg-profile.ts`) is the public result container with `writeHtml(path?)` for file output.
 
