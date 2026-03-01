@@ -31,29 +31,29 @@ function heatDataAttr(pct: number): string {
 function generateCss(): string {
   return `
     :root {
-      --bg: #0a0e1a;
-      --surface: #111a2e;
-      --surface-hover: #162040;
-      --text: #e2e8f0;
-      --text-secondary: #8892a8;
-      --muted: #5a6578;
-      --border: #1c2844;
+      --bg: #0c1021;
+      --surface: #161f36;
+      --surface-hover: #1e2a4a;
+      --text: #e8ecf4;
+      --text-secondary: #a3b1c8;
+      --muted: #7e8da3;
+      --border: #263555;
 
-      --first-party-accent: #10b981;
-      --first-party-bg: rgba(16, 185, 129, 0.05);
+      --first-party-accent: #34d399;
+      --first-party-bg: rgba(52, 211, 153, 0.07);
       --dep-bg: var(--surface);
 
-      --bar-track: #1c2844;
-      --bar-fill: #60a5fa;
-      --bar-fill-fp: #10b981;
-      --bar-fill-async: #a78bfa;
+      --bar-track: #263555;
+      --bar-fill: #6bafff;
+      --bar-fill-fp: #34d399;
+      --bar-fill-async: #b49afa;
 
-      --heat-cool: #60a5fa;
+      --heat-cool: #6bafff;
       --heat-warm: #fbbf24;
       --heat-hot: #fb7185;
 
-      --other-text: #3d4a5e;
-      --table-header-bg: #0d1225;
+      --other-text: #5e7088;
+      --table-header-bg: #111929;
       --shadow: 0 4px 16px rgba(0,0,0,0.5);
       --radius: 10px;
 
@@ -66,7 +66,7 @@ function generateCss(): string {
     body {
       font-family: var(--font-sans);
       background: var(--bg);
-      background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.018) 1px, transparent 0);
+      background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.025) 1px, transparent 0);
       background-size: 20px 20px;
       color: var(--text);
       line-height: 1.5;
@@ -188,12 +188,12 @@ function generateCss(): string {
       border-radius: 50%;
       background: var(--bar-fill);
       cursor: pointer;
-      box-shadow: 0 0 8px rgba(96, 165, 250, 0.4);
+      box-shadow: 0 0 8px rgba(107, 175, 255, 0.4);
       transition: box-shadow 0.2s;
     }
 
     .threshold-control input[type="range"]::-webkit-slider-thumb:hover {
-      box-shadow: 0 0 12px rgba(96, 165, 250, 0.6);
+      box-shadow: 0 0 12px rgba(107, 175, 255, 0.6);
     }
 
     .threshold-control input[type="range"]::-moz-range-thumb {
@@ -512,9 +512,9 @@ function generateCss(): string {
       flex-shrink: 0;
     }
 
-    .tree-label.pkg { background: #1e293b; color: #94a3b8; }
-    .tree-label.file { background: rgba(96, 165, 250, 0.12); color: #60a5fa; }
-    .tree-label.fn { background: rgba(148, 163, 184, 0.08); color: #64748b; }
+    .tree-label.pkg { background: #1e293b; color: #a3b4c8; }
+    .tree-label.file { background: rgba(107, 175, 255, 0.14); color: #6bafff; }
+    .tree-label.fn { background: rgba(163, 177, 200, 0.1); color: #8494a7; }
 
     .tree-stats {
       font-family: var(--font-mono);
@@ -627,7 +627,7 @@ function generateCss(): string {
       font-family: var(--font-mono);
       font-size: 0.78rem;
       line-height: 1.7;
-      border-top: 1px solid #2a2a3e;
+      border-top: 1px solid #2e3350;
     }
     .source-snippet code { display: block; }
     .src-line {
@@ -644,14 +644,14 @@ function generateCss(): string {
       display: inline-block;
       width: 3.5em;
       text-align: right;
-      color: #585b70;
+      color: #6e7289;
       padding-right: 1em;
       flex-shrink: 0;
       user-select: none;
     }
-    .tok-kw { color: #cba6f7; }
+    .tok-kw { color: #d4b5ff; }
     .tok-str { color: #a6e3a1; }
-    .tok-cmt { color: #6c7086; font-style: italic; }
+    .tok-cmt { color: #7f839c; font-style: italic; }
     .tok-num { color: #fab387; }
 
     /* Async call stack */

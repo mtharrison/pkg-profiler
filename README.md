@@ -5,14 +5,20 @@
 <h1 align="center">pkg-profiler</h1>
 
 <p align="center">
-  <strong>Where's your wall time going? Find out in one call.</strong><br>
+  <strong>See which packages own your wall time.</strong><br>
   Zero-dependency sampling profiler that breaks down Node.js wall time consumed by CPU and IO bound operations by npm package.
 </p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@mtharrison/pkg-profiler"><img src="https://img.shields.io/npm/v/@mtharrison/pkg-profiler" alt="npm version"></a>
-  <img src="https://img.shields.io/node/v/@mtharrison/pkg-profiler" alt="node version">
+  <img src="https://img.shields.io/badge/dependencies-0-brightgreen" alt="zero dependencies">
+  <img src="https://img.shields.io/badge/TypeScript-strict-blue?logo=typescript&logoColor=white" alt="TypeScript strict">
+  <a href="https://www.npmjs.com/package/@mtharrison/pkg-profiler"><img src="https://img.shields.io/npm/dm/@mtharrison/pkg-profiler" alt="npm downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/npm/l/@mtharrison/pkg-profiler" alt="license"></a>
+  <br>
+  <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2020" alt="Node 20"></a>
+  <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2022" alt="Node 22"></a>
+  <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2024" alt="Node 24"></a>
 </p>
 
 <p align="center">
@@ -30,28 +36,19 @@ Works with both ESM (`import`) and CommonJS (`require`).
 ## Quick Start
 
 ```typescript
-import { start, stop } from "@mtharrison/pkg-profiler";
+import { profile } from "@mtharrison/pkg-profiler";
 
-await start();
-// ... your code here ...
-const result = await stop();
-result.writeHtml(); // writes an HTML report to cwd
+await profile({
+  trackAsync: true,
+  onExit: (result) => result.writeHtml(),
+});
+
+const app = createApp();
+app.listen(3000);
+// Ctrl+C -> profiler stops -> HTML report written -> process exits
 ```
 
-With async I/O tracking:
-
-```typescript
-import { start, stop } from "@mtharrison/pkg-profiler";
-
-await start({ trackAsync: true });
-// ... your code with network/file I/O ...
-const result = await stop();
-console.log(`Wall time: ${result.wallTimeUs}us`);
-console.log(`Async I/O wait: ${result.totalAsyncTimeUs}us`);
-result.writeHtml();
-```
-
-Or use the convenience wrapper:
+Profile a block of code:
 
 ```typescript
 import { profile } from "@mtharrison/pkg-profiler";
@@ -59,6 +56,17 @@ import { profile } from "@mtharrison/pkg-profiler";
 const result = await profile(async () => {
   await build();
 });
+result.writeHtml();
+```
+
+Or use the lower-level start/stop API:
+
+```typescript
+import { start, stop } from "@mtharrison/pkg-profiler";
+
+await start({ trackAsync: true });
+// ... your code here ...
+const result = await stop();
 result.writeHtml();
 ```
 
