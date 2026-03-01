@@ -4,6 +4,9 @@
  * Tracks the time between async resource init (when the I/O op is started)
  * and the first before callback (when the callback fires), attributing
  * that wait time to the package/file/function that initiated the operation.
+ *
+ * Intervals are buffered and merged at disable() time so that overlapping
+ * concurrent I/O is not double-counted.
  */
 
 import { createHook } from 'node:async_hooks';
@@ -37,6 +40,56 @@ interface PendingOp {
   fn: string;
 }
 
+export interface Interval {
+  startUs: number;
+  endUs: number;
+}
+
+/**
+ * Merge overlapping or adjacent intervals. Returns a new sorted array
+ * of non-overlapping intervals.
+ */
+export function mergeIntervals(intervals: Interval[]): Interval[] {
+  if (intervals.length <= 1) return intervals.slice();
+
+  const sorted = intervals.slice().sort((a, b) => a.startUs - b.startUs);
+  const merged: Interval[] = [{ ...sorted[0]! }];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const current = sorted[i]!;
+    const last = merged[merged.length - 1]!;
+
+    if (current.startUs <= last.endUs) {
+      // Overlapping or adjacent — extend
+      if (current.endUs > last.endUs) {
+        last.endUs = current.endUs;
+      }
+    } else {
+      merged.push({ ...current });
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Sum the durations of a list of (presumably non-overlapping) intervals.
+ */
+function sumIntervals(intervals: Interval[]): number {
+  let total = 0;
+  for (const iv of intervals) {
+    total += iv.endUs - iv.startUs;
+  }
+  return total;
+}
+
+/**
+ * Convert an hrtime tuple to absolute microseconds.
+ */
+function hrtimeToUs(hr: [number, number]): number {
+  return hr[0] * 1_000_000 + Math.round(hr[1] / 1000);
+}
+
 /**
  * Parse a single line from an Error().stack trace into file path and function id.
  * Returns null for lines that don't match V8's stack frame format or are node internals.
@@ -68,24 +121,39 @@ export function parseStackLine(line: string): { filePath: string; functionId: st
 
 export class AsyncTracker {
   private readonly resolver: PackageResolver;
-  private readonly store: SampleStore;
   private readonly thresholdUs: number;
   private hook: AsyncHook | null = null;
   private pending = new Map<number, PendingOp>();
 
+  /** Buffered intervals keyed by "pkg\0file\0fn" */
+  private keyedIntervals = new Map<string, Interval[]>();
+  /** Flat list of all intervals for global merging */
+  private globalIntervals: Interval[] = [];
+  /** Origin time in absolute microseconds, set when enable() is called */
+  private originUs = 0;
+
+  /** Merged global total set after flush() */
+  private _mergedTotalUs = 0;
+
   /**
    * @param resolver - PackageResolver for mapping file paths to packages
-   * @param store - SampleStore to record async wait times into
+   * @param store - SampleStore to record async wait times into (used at flush time)
    * @param thresholdUs - Minimum wait duration in microseconds to record (default 1000 = 1ms)
    */
-  constructor(resolver: PackageResolver, store: SampleStore, thresholdUs: number = 1000) {
+  constructor(resolver: PackageResolver, private readonly store: SampleStore, thresholdUs: number = 1000) {
     this.resolver = resolver;
-    this.store = store;
     this.thresholdUs = thresholdUs;
+  }
+
+  /** Merged global async total in microseconds, available after disable(). */
+  get mergedTotalUs(): number {
+    return this._mergedTotalUs;
   }
 
   enable(): void {
     if (this.hook) return;
+
+    this.originUs = hrtimeToUs(process.hrtime());
 
     this.hook = createHook({
       init: (asyncId: number, type: string) => {
@@ -131,11 +199,23 @@ export class AsyncTracker {
         const op = this.pending.get(asyncId);
         if (!op) return;
 
-        const elapsed = process.hrtime(op.startHrtime);
-        const durationUs = elapsed[0] * 1_000_000 + Math.round(elapsed[1] / 1000);
+        const endHr = process.hrtime();
+        const startUs = hrtimeToUs(op.startHrtime);
+        const endUs = hrtimeToUs(endHr);
+        const durationUs = endUs - startUs;
 
         if (durationUs >= this.thresholdUs) {
-          this.store.record(op.pkg, op.file, op.fn, durationUs);
+          const interval: Interval = { startUs, endUs };
+          const key = `${op.pkg}\0${op.file}\0${op.fn}`;
+
+          let arr = this.keyedIntervals.get(key);
+          if (!arr) {
+            arr = [];
+            this.keyedIntervals.set(key, arr);
+          }
+          arr.push(interval);
+
+          this.globalIntervals.push(interval);
         }
 
         this.pending.delete(asyncId);
@@ -156,23 +236,54 @@ export class AsyncTracker {
     this.hook.disable();
 
     // Resolve any pending ops using current time
-    const now = process.hrtime();
+    const nowHr = process.hrtime();
+    const nowUs = hrtimeToUs(nowHr);
     for (const [, op] of this.pending) {
-      // Compute elapsed from op start to now
-      let secs = now[0] - op.startHrtime[0];
-      let nanos = now[1] - op.startHrtime[1];
-      if (nanos < 0) {
-        secs -= 1;
-        nanos += 1_000_000_000;
-      }
-      const durationUs = secs * 1_000_000 + Math.round(nanos / 1000);
+      const startUs = hrtimeToUs(op.startHrtime);
+      const durationUs = nowUs - startUs;
 
       if (durationUs >= this.thresholdUs) {
-        this.store.record(op.pkg, op.file, op.fn, durationUs);
+        const interval: Interval = { startUs, endUs: nowUs };
+        const key = `${op.pkg}\0${op.file}\0${op.fn}`;
+
+        let arr = this.keyedIntervals.get(key);
+        if (!arr) {
+          arr = [];
+          this.keyedIntervals.set(key, arr);
+        }
+        arr.push(interval);
+
+        this.globalIntervals.push(interval);
       }
     }
 
     this.pending.clear();
     this.hook = null;
+
+    this.flush();
+  }
+
+  /**
+   * Merge buffered intervals and record to the store.
+   * Sets mergedTotalUs to the global merged duration.
+   */
+  private flush(): void {
+    // Per-key: merge overlapping intervals, sum durations, record to store
+    for (const [key, intervals] of this.keyedIntervals) {
+      const merged = mergeIntervals(intervals);
+      const totalUs = sumIntervals(merged);
+      if (totalUs > 0) {
+        const parts = key.split('\0');
+        this.store.record(parts[0]!, parts[1]!, parts[2]!, totalUs);
+      }
+    }
+
+    // Global: merge all intervals to compute real elapsed async wait
+    const globalMerged = mergeIntervals(this.globalIntervals);
+    this._mergedTotalUs = sumIntervals(globalMerged);
+
+    // Clean up buffers
+    this.keyedIntervals.clear();
+    this.globalIntervals = [];
   }
 }

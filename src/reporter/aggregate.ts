@@ -37,10 +37,13 @@ function sumStore(store: SampleStore): number {
  * @param asyncStore - Optional SampleStore with async wait time data
  * @returns ReportData with all packages sorted desc by time, no threshold applied
  */
-export function aggregate(store: SampleStore, projectName: string, asyncStore?: SampleStore): ReportData {
+export function aggregate(store: SampleStore, projectName: string, asyncStore?: SampleStore, globalAsyncTimeUs?: number): ReportData {
   // 1. Calculate total user-attributed time
   const totalTimeUs = sumStore(store);
+  // Per-entry percentages use the raw sum so they add up to 100%
   const totalAsyncTimeUs = asyncStore ? sumStore(asyncStore) : 0;
+  // Header total uses the merged (de-duplicated) global value when available
+  const headerAsyncTimeUs = globalAsyncTimeUs ?? totalAsyncTimeUs;
 
   if (totalTimeUs === 0 && totalAsyncTimeUs === 0) {
     return {
@@ -240,8 +243,8 @@ export function aggregate(store: SampleStore, projectName: string, asyncStore?: 
     projectName,
   };
 
-  if (totalAsyncTimeUs > 0) {
-    result.totalAsyncTimeUs = totalAsyncTimeUs;
+  if (headerAsyncTimeUs > 0) {
+    result.totalAsyncTimeUs = headerAsyncTimeUs;
   }
 
   return result;

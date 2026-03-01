@@ -89,8 +89,10 @@ function stopSync(): PkgProfile {
   postSync("Profiler.disable");
   profiling = false;
 
+  let globalAsyncTimeUs: number | undefined;
   if (asyncTracker) {
     asyncTracker.disable();
+    globalAsyncTimeUs = asyncTracker.mergedTotalUs;
     asyncTracker = null;
   }
 
@@ -101,6 +103,7 @@ function stopSync(): PkgProfile {
     store,
     projectName,
     asyncStore.packages.size > 0 ? asyncStore : undefined,
+    globalAsyncTimeUs,
   );
   store.clear();
   asyncStore.clear();
