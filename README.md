@@ -2,7 +2,7 @@
   <img src="assets/logo-removebg-preview.png" width="180" height="180" alt="where-you-at logo">
 </p>
 
-<h1 align="center">pkg-profiler</h1>
+<div align="center"><h1>@mtharrison/pkg-profiler</h1></div>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@mtharrison/pkg-profiler"><img src="https://img.shields.io/npm/v/@mtharrison/pkg-profiler" alt="npm version"></a>
@@ -15,6 +15,8 @@
   <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2022" alt="Node 22"></a>
   <a href="https://github.com/mtharrison/pkg-profiler/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mtharrison/pkg-profiler/ci.yml?logo=node.js&label=Node%2024" alt="Node 24"></a>
 </p>
+
+---
 
 <h3 align="center">See which packages own your wall time.</h3>
 <p align="center">
