@@ -25,9 +25,16 @@
 
 <h3 align="center"><a href="#installation">Installation</a> &nbsp;&middot;&nbsp; <a href="#quick-start">Quick Start</a> &nbsp;&middot;&nbsp; <a href="#api">API</a> &nbsp;&middot;&nbsp; <a href="#async-io-tracking">Async I/O Tracking</a> &nbsp;&middot;&nbsp; <a href="#how-it-works">How It Works</a></h3>
 
-<p align="center">
-  <img src="assets/report-screenshot.png" width="700" alt="Example HTML report showing per-package wall time breakdown">
-</p>
+<table align="center">
+  <tr>
+    <td align="center"><strong>CPU Profiling</strong></td>
+    <td align="center"><strong>Async I/O Tracking</strong></td>
+  </tr>
+  <tr>
+    <td><img src="assets/report-screenshot.png" width="350" alt="CPU profiling report showing per-package CPU time breakdown"></td>
+    <td><img src="assets/async-report-screenshot.png" width="350" alt="Async I/O report showing per-package async wait time breakdown"></td>
+  </tr>
+</table>
 
 ## Installation
 
