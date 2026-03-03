@@ -31,8 +31,8 @@
     <td align="center"><strong>Async I/O Tracking</strong></td>
   </tr>
   <tr>
-    <td><img src="assets/report-screenshot.png" width="350" alt="CPU profiling report showing per-package CPU time breakdown"></td>
-    <td><img src="assets/async-report-screenshot.png" width="350" alt="Async I/O report showing per-package async wait time breakdown"></td>
+    <td valign="top"><img src="assets/report-screenshot.png" width="350" alt="CPU profiling report showing per-package CPU time breakdown"></td>
+    <td valign="top"><img src="assets/async-report-screenshot.png" width="350" alt="Async I/O report showing per-package async wait time breakdown"></td>
   </tr>
 </table>
 
