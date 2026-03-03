@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo-removebg-preview.png" width="200"" alt="where-you-at logo">
+  <img src="assets/logo-removebg-preview.png" width="200"" alt="pkg-profiler logo">
 </p>
 
 <p align="center"><strong><span style="font-size:2em">@mtharrison/pkg-profiler</span></strong></p>
@@ -151,7 +151,7 @@ Returned by `stop()` and `profile()`. Contains aggregated profiling data.
 
 Write a self-contained HTML report to disk. Returns the absolute path to the written file.
 
-- **Default**: writes to `./where-you-at-{timestamp}.html` in the current directory
+- **Default**: writes to `./pkg-profiler-{timestamp}.html` in the current directory
 - **With path**: writes to the specified location
 
 ## Async I/O Tracking

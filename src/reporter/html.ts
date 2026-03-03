@@ -1315,7 +1315,7 @@ export function renderHtml(data: ReportData): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${titleName} · where-you-at report</title>
+  <title>${titleName} · pkg-profiler report</title>
   <style>${generateCss()}
   </style>
 </head>

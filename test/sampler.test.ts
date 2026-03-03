@@ -78,7 +78,7 @@ describe("sampler", () => {
       const filepath = result.writeHtml();
       generatedFiles.push(filepath);
 
-      expect(filepath).toContain("where-you-at-");
+      expect(filepath).toContain("pkg-profiler-");
       expect(existsSync(filepath)).toBe(true);
     });
 

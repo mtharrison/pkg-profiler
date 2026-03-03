@@ -453,7 +453,7 @@ describe('PkgProfile.writeHtml()', () => {
     generatedFiles.push(filepath);
 
     expect(typeof filepath).toBe('string');
-    expect(filepath).toContain('where-you-at-');
+    expect(filepath).toContain('pkg-profiler-');
     expect(filepath).toContain('.html');
     expect(existsSync(filepath)).toBe(true);
   });
